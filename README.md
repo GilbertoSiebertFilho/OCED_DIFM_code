@@ -3,9 +3,9 @@
 OCED's raw-data yield cleaning as a Python library and a command line, without the app, made to be plugged into
 the DIFM platform. The Python package in this repository is called `oced-clean` (import name `oced_clean`).
 
-Raw yield-monitor data and the field boundary go in. The clean point shapefile and a cleaning summary come out. The
-clean shapefile has the column names of an Ag Leader SMS export, so it can take the place of the SMS export in a
-pipeline that already reads one.
+Raw yield-monitor data and the field boundary go in. Two things come out: the clean readings as a point shapefile
+in the layout of an Ag Leader SMS shapefile export (the same columns, in the same order, with the same field
+types), and a cleaning summary. That shapefile goes where the SMS export goes today.
 
 ```
 raw upload (.cn1 card, GreenStar 3 card, JD-Data .jdl logs, Operations Center export)  +  boundary
@@ -14,7 +14,7 @@ raw upload (.cn1 card, GreenStar 3 card, JD-Data .jdl logs, Operations Center ex
    oced-clean        import as SMS  ->  clip  ->  Optimize Swath Widths  ->  moisture  ->  speed  ->  dry yield
         |
         v
-<tag>_sms3s_clean.zip (point shapefile, SMS column names)  +  <tag>_sms3s_summary.json
+the shapefile for DIFM (zip, SMS shapefile export layout)  +  <tag>_sms3s_summary.json
         |
         v
 the existing pipeline, where the SMS shapefile export goes today
@@ -37,23 +37,35 @@ comes from.
 | The tools that copy the engine and compare the result with OCED (`tools/`) | written |
 | The cleaning engine (`src/oced_clean/_engine/`) | **not in the repository yet** |
 | OCED's synthetic-data generators the tests use (`tests/oced_synthetic/`) | **not in the repository yet** |
+| The shapefile for DIFM, in the SMS shapefile export layout | **comes with the engine**; its layout and the test of it are here |
 
 The engine and the generators are copied from OCED version 0.3.0 by `tools/sync_engine.py`. That version is being
 published; the copy is added here as soon as it is public.
+
+Changed on 11 November 2026, after a first upload to the platform: the file handed to DIFM is no longer OCED's full
+clean file. The platform takes that file at upload, but its Define Features page does not get through it (it has
+columns an SMS export does not have, and its time column is text). The same readings written in the layout of an
+SMS shapefile export go through. OCED 0.3.0 writes that file, and this package hands it out as `result.difm_zip`;
+see [The shapefile for DIFM](#the-shapefile-for-difm). The full clean file is still written, for checking.
 
 Done so far, on the developer's computer, with the 0.3.0 engine before its publication:
 
 - the route ran from the upload to the clean shapefile on synthetic uploads of all four sources (a `.cn1` card, a
   GreenStar 3 card, Gen4 `.jdl` logs, an Operations Center export);
-- 46 of the 50 tests passed, among them the comparison of this package with the engine's own command line, byte for
-  byte, for every source. The other four tests check the copied engine itself (its manifest, and that a run loads
-  no plotting library) and can only run once the copy is in.
+- 46 of the first 50 tests passed, among them the comparison of this package with the engine's own command line,
+  byte for byte, for every source. The other four check the copied engine itself (its manifest, and that a run
+  loads no plotting library) and can only run once the copy is in;
+- the 16 tests of the shapefile for DIFM were added afterwards and have not run against an engine yet: the engine
+  used so far does not write that file. The checker they use was tried on hand-made files (it passes a file in the
+  layout, and refuses dates written as text and columns in another order).
 
 Still to do once the engine is in: the full test run, an install into a clean environment, the byte-for-byte
-comparison with OCED on real raw data, and a run on Linux (see [Limits](#limits)).
+comparison with OCED on real raw data, an upload of the shapefile for DIFM to the platform, and a run on Linux
+(see [Limits](#limits)).
 
-Until then, read this document as the description of what the package does and how it is called. The interface
-described below is not expected to change.
+Until then, read this document as the description of what the package does and how it is called. One thing is
+still open in the interface: the file name of the shapefile for DIFM, which OCED's engine decides. Take its path
+from `result.difm_zip`, not from a name pattern.
 
 ## Contents
 
@@ -117,8 +129,7 @@ Command line:
 oced-clean clean upload.zip --boundary boundary.geojson --out work/job_123
 ```
 
-It prints the steps with their limits and counts, and writes the clean file to
-`work/job_123/output/<tag>_sms3s_clean.zip`.
+It prints the steps with their limits and counts, and writes the files to `work/job_123/output/`.
 
 Python:
 
@@ -126,7 +137,8 @@ Python:
 import oced_clean
 
 result = oced_clean.clean_yield(["upload.zip"], "boundary.geojson", "work/job_123")
-result.clean_zip        # the clean shapefile, zipped
+result.difm_zip         # the shapefile for DIFM, zipped: the clean readings in the SMS shapefile export layout
+result.clean_zip        # the full clean file, with OCED's extra columns (for checking, not for the upload)
 result.yield_column     # the column to map as the dry yield, bu/ac ("Yld_Vol_Dr" for raw data)
 result.summary          # dict: what was read, the import settings, every step with its limits and counts
 print(result.text())    # the same as a short text report
@@ -259,7 +271,8 @@ Everything lands in the work folder given as `out_dir` / `--out`:
   input/      the upload, unpacked
   decoded/    <tag>_decoded.shp    every reading decoded from the raw data (raw uploads only)
               <tag>_imported.shp   the readings after the import as SMS: the input of the cleaning
-  output/     <tag>_sms3s_clean.shp  .shx .dbf .prj .cpg     the clean file
+  output/     the shapefile for DIFM  .shp .shx .dbf .prj (.cpg) and .zip    the upload: result.difm_zip
+              <tag>_sms3s_clean.shp  .shx .dbf .prj .cpg     the full clean file
               <tag>_sms3s_clean.zip                          the same five files, zipped
               <tag>_sms3s_flagged.shp ... and .zip           every reading inside the boundary, kept or not
               <tag>_sms3s_summary.json                       the cleaning summary
@@ -269,10 +282,46 @@ Everything lands in the work folder given as `out_dir` / `--out`:
 `<tag>` is the field name and year of a raw card (`Home_Quarter_2026`), or the file name of a point file. Set it
 with `tag`. `cleanup=True` / `--cleanup` removes `input/` and `decoded/` at the end.
 
-### The clean shapefile
+### The shapefile for DIFM
 
-Points, WGS 84 (EPSG:4326), one per kept reading. For raw data the columns are these, in this order (the names and
-units of an SMS point export):
+`result.difm_zip` (and `result.difm_shp`). The kept readings, one point each: the same readings, positions and
+values as the full clean file below, written the way Ag Leader SMS writes a shapefile export of a grain harvest.
+The columns, in this order:
+
+| # | Column | DBF type | Unit | Meaning |
+|---|---|---|---|---|
+| 1 | `Field` | C (text) | | field name |
+| 2 | `Dataset` | C (text) | | task or log of the reading |
+| 3 | `Product` | C (text) | | crop |
+| 4 | `Obj__Id` | N, 18 wide, 0 decimals | | record number |
+| 5 | `Distance_f` | N | ft | distance travelled |
+| 6 | `Track_deg_` | N | degrees | heading, clockwise from north |
+| 7 | `Duration_s` | N | s | time the reading stands for |
+| 8 | `Elevation_` | N | ft | GNSS altitude |
+| 9 | `Time` | D (date) | | local harvest date of the reading, the date only |
+| 10 | `Swth_Wdth_` | N | ft | swath width after Optimize Swath Widths |
+| 11 | `Y_Offset_f` | N | ft | lateral offset; 0 when there is none |
+| 12 | `Moisture__` | N | % | grain moisture, wet basis |
+| 13 | `Yld_Mass_W` | N | lb/ac | wet mass per area |
+| 14 | `Yld_Vol_We` | N | bu/ac | wet volume |
+| 15 | `Yld_Mass_D` | N | lb/ac | mass per area at the dry moisture |
+| 16 | `Yld_Vol_Dr` | N | bu/ac | **dry yield: the column to analyse** |
+| 17 | `Speed_mph_` | N | mph | ground speed |
+| 18 | `Date` | D (date) | | local harvest date |
+
+- Coordinates are WGS 84, and the `.prj` is the ESRI definition `GCS_WGS_1984`.
+- `Time` and `Date` are true DBF date fields (type `D`, eight characters, `YYYYMMDD`), not text.
+- The zip holds `.shp`, `.shx`, `.dbf`, `.prj` and, when written, `.cpg`, with nothing else and no folder.
+- No other column is in it. What OCED adds (the combine id, the day, the session, the swath width as logged) is in
+  the full clean file and in the summary.
+
+`tests/test_difm_file.py` checks every line of this on a synthetic upload, reading the `.dbf` header itself.
+
+### The full clean shapefile
+
+Not the file to upload: the Define Features page of the platform does not get through it. It is the file to open
+when a result needs checking. Points, WGS 84 (EPSG:4326), one per kept reading. For raw data the columns are these,
+in this order (the names and units of an SMS point export):
 
 | Column | Unit | Meaning |
 |---|---|---|
@@ -358,14 +407,14 @@ The keys of the summary:
 | `cleaning.steps[]` | one row per step and group, in the order they ran: `step`, `name`, `group`, `attribute`, `unit`, `readings_before`, `mean`, `sd`, `lower`, `upper`, `removed`, `remaining`, and for S3 to S5 `sd_after`, `sd_drop_pct`, `no_value` |
 | `cleaning.combines[]` | per combine: `readings`, `kept`, `days`, `mean_dry_yield` |
 | `result` | `yield_column`, `readings`, `area_ac`, `mean`, `average_area_weighted` (total / area, the "Avg. Yield" of an SMS summary), `median`, `sd`, `min`, `max`, `coordinate_system`, `added_columns`, `swath_changes` |
-| `columns` | which column of the clean file holds what, with its unit: `yield_volume_dry`, `yield_mass_dry`, `yield_volume_wet`, `yield_mass_wet`, `moisture`, `swath_width`, `distance`, `speed`, `heading`, `duration`, `time`, `elevation`, `harvester_id`, `dataset` |
-| `files` | the paths of the clean and flagged files and of the engine's record |
+| `columns` | which column of the full clean file holds what, with its unit: `yield_volume_dry`, `yield_mass_dry`, `yield_volume_wet`, `yield_mass_wet`, `moisture`, `swath_width`, `distance`, `speed`, `heading`, `duration`, `time`, `elevation`, `harvester_id`, `dataset`. The shapefile for DIFM needs no such list: its columns are always the eighteen above |
+| `files` | the paths of the shapefile for DIFM (`difm_shp`, `difm_zip`), of the full clean and flagged files and of the engine's record |
 | `warnings`, `checks`, `notes` | what the engine wants a person to read. `warnings` matter: a combine whose points sit beside its strip, readings with no moisture value, a crop the table does not know |
 
 ## Calling it from the DIFM pipeline
 
 Where it goes: after the upload of the raw harvest data and before the step that today receives the SMS shapefile
-export. The clean zip is that step's yield file.
+export. `result.difm_zip` is that step's yield file.
 
 ### From Python
 
@@ -382,31 +431,32 @@ def clean_harvest_upload(upload_paths, boundary_path, job_dir, crop=None):
     except ValueError as e:
         # a problem the user can fix; str(e) says what (wrong boundary, nothing recognised, not a harvest ...)
         raise
-    return result.clean_zip, result.summary
+    return result.difm_zip, result.summary
 ```
 
 Notes for the integration:
 
 - **One folder per job.** Two runs must not share an `out_dir`. Runs in different folders can run at the same
   time; the package keeps no global state and writes nothing outside `out_dir`.
-- **Define Features.** `result.summary["columns"]` names the column and unit of each feature, so the mapping the
-  user does by hand today can be filled in:
+- **Define Features.** The shapefile for DIFM always has the same eighteen columns, so the mapping the user does by
+  hand today is the one of an SMS export and can be filled in:
 
-  | Feature | `summary["columns"][...]` | Raw data gives |
-  |---|---|---|
-  | Yield, volume (preferred) | `yield_volume_dry` | `Yld_Vol_Dr`, bu/ac |
-  | Yield, mass | `yield_mass_dry` | `Yld_Mass_D`, lb/ac |
-  | Moisture | `moisture` | `Moisture__`, % |
-  | Width | `swath_width` | `Swth_Wdth_`, ft |
-  | Distance | `distance` | `Distance_f`, ft |
-  | Speed | `speed` | `Speed_mph_`, mph |
-  | Heading | `heading` | `Track_deg_`, degrees |
-  | Elevation | `elevation` | `Elevation_`, ft |
-  | Time | `time` | `Time` |
-  | Harvester id | `harvester_id` | `Machine` |
+  | Feature | Column of the shapefile for DIFM |
+  |---|---|
+  | Yield, volume (preferred) | `Yld_Vol_Dr`, bu/ac |
+  | Yield, mass | `Yld_Mass_D`, lb/ac |
+  | Moisture | `Moisture__`, % |
+  | Width | `Swth_Wdth_`, ft |
+  | Distance | `Distance_f`, ft |
+  | Speed | `Speed_mph_`, mph |
+  | Heading | `Track_deg_`, degrees |
+  | Elevation | `Elevation_`, ft |
+  | Date | `Date` (and `Time`, the same date) |
 
-- **Harvester id.** `Machine` holds the combine's serial number on every reading of a raw upload, so a later step
-  that works per combine has its column.
+- **Harvester id.** The SMS export layout has no column for the combine, so the shapefile for DIFM has none. The
+  combine of every reading is in `Machine` of the full clean file (its serial number, for a raw upload), and
+  `summary["cleaning"]["combines"]` lists the combines with their counts and means. A later step that works per
+  combine needs one of the two.
 - **The crop.** For John Deere data the crop comes from the file. For a Case IH / New Holland card the crop name on
   the card is matched to SMS's product table. When the platform knows the crop of the trial, pass it as `product`;
   it then decides the bushel weight and dry moisture. Mind that these two values change the dry yield: the same
@@ -427,7 +477,7 @@ out <- system2("oced-clean",
                stdout = TRUE)
 res <- jsonlite::fromJSON(paste(out, collapse = "\n"))
 if (!isTRUE(res$ok)) stop(res$error)
-yield_zip <- res$clean_zip
+yield_zip <- res$difm_zip
 yield_col <- res$yield_column
 ```
 
@@ -469,8 +519,9 @@ is cleaned. In Python: `oced_clean.inspect_upload(inputs, work_dir, boundary)`.
 | `cleanup` | `--cleanup` | off | remove `input/`, `decoded/` and `sections/` at the end |
 | `log` | `--quiet`, `--json` | logging | Python: a function taking one text line (default `logging.getLogger("oced_clean").info`) |
 
-`clean_yield` returns a `CleanResult`: `clean_shp`, `clean_zip`, `flagged_shp`, `flagged_zip`, `yield_column`,
-`summary`, `summary_json`, `engine_json`, `out_dir`, and the methods `text()` and `to_dict()`.
+`clean_yield` returns a `CleanResult`: `difm_shp`, `difm_zip`, `clean_shp`, `clean_zip`, `flagged_shp`,
+`flagged_zip`, `yield_column`, `summary`, `summary_json`, `engine_json`, `out_dir`, and the methods `text()` and
+`to_dict()`.
 
 `oced_clean.inspect_upload(inputs, work_dir, boundary=None, boundary_feature=None)` returns
 `{"datasets": [...], "notes": [...], "message": str}`.
@@ -541,6 +592,7 @@ repository, and none may be added.
 | File | Checks |
 |---|---|
 | `tests/test_route.py` | the files written, the summary, the clip against the geometry, the import's minimum, the columns |
+| `tests/test_difm_file.py` | the shapefile for DIFM: the eighteen columns in order, their DBF types read from the file header, the two date fields, the `.prj`, the zip, and that it holds the readings and values of the full clean file |
 | `tests/test_rules.py` | the rules, against a second statement of them written in `tests/helpers.py`: order, mean ± 3 SD recomputed before every step, the 25 % rule, one unit per combine, per task, per field |
 | `tests/test_raw_formats.py` | one synthetic upload per format through the whole route: `.cn1` card (also in capitals, also zipped), Gen4 `.jdl` logs, GreenStar 3 card, Operations Center export by section |
 | `tests/test_parity.py` | `clean_yield` against the engine's own command line: the clean and flagged shapefiles byte for byte, for every format |

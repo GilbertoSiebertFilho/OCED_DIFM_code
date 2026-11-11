@@ -57,8 +57,8 @@ class SeveralDatasetsError(CleaningError):
 @dataclasses.dataclass
 class CleanResult:
     """What clean_yield returns. Every path is absolute."""
-    clean_shp: str            # the clean point shapefile (WGS 84); .shx .dbf .prj .cpg beside it
-    clean_zip: str            # the same five files zipped: the yield upload of the existing pipeline
+    clean_shp: str            # the full clean point shapefile (WGS 84), with OCED's extra columns; for checking
+    clean_zip: str            # the same five files zipped
     flagged_shp: str          # every reading that went into the cleaning, with Keep (1/0) and Rem_By (the step)
     flagged_zip: str
     yield_column: str         # the column of the clean file to map as the dry yield, bu/ac
@@ -66,6 +66,8 @@ class CleanResult:
     summary_json: str
     engine_json: str          # the engine's full record of the run (every setting, limit, count, warning)
     out_dir: str              # the work folder of the run
+    difm_shp: str | None = None   # the shapefile for DIFM: the kept readings in the layout of an SMS shapefile export
+    difm_zip: str | None = None   # the same zipped: the yield upload of the DIFM pipeline
 
     def text(self) -> str:
         """The summary as a short plain-text report."""
@@ -333,8 +335,11 @@ def clean_yield(inputs, boundary, out_dir, *, boundary_feature=None, candidate: 
         S["files"]["intermediate_files_removed"] = True
         with open(sj, "w", encoding="utf-8") as f:
             json.dump(S, f, indent=1)
+    difm_shp, difm_zip = _summary.difm_files(files)
+    if difm_zip:
+        emit(f"shapefile for DIFM: {difm_zip}")
     emit(f"clean file: {files['difm_ready_zip']} (map the yield to {S['result']['yield_column']})")
     return CleanResult(clean_shp=files["difm_ready_shp"], clean_zip=files["difm_ready_zip"],
                        flagged_shp=files["flagged_shp"], flagged_zip=files["flagged_zip"],
                        yield_column=S["result"]["yield_column"], summary=S, summary_json=sj,
-                       engine_json=files["json"], out_dir=work)
+                       engine_json=files["json"], out_dir=work, difm_shp=difm_shp, difm_zip=difm_zip)

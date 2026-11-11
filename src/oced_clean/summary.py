@@ -172,6 +172,18 @@ def _combines(R: dict) -> list:
     return out
 
 
+# Where the engine's record of the run names the shapefile in the SMS shapefile export layout. Written before that
+# output of OCED was published: set these to the engine's own keys when the engine is copied in. Until they match,
+# tests/test_difm_file.py fails, which is the reminder.
+DIFM_FILE_KEYS = ("difm_shp", "difm_zip")
+
+
+def difm_files(files: dict) -> tuple:
+    """(shp, zip) of the shapefile for DIFM as the engine's record of the run names them; None where it wrote none.
+    (The engine's keys 'difm_ready_shp' / 'difm_ready_zip' are its full clean file, which is another file.)"""
+    return files.get(DIFM_FILE_KEYS[0]), files.get(DIFM_FILE_KEYS[1])
+
+
 def build(R: dict, files: dict, dataset: dict, units: list, unit_note: str, decode_report: dict | None,
           import_record: dict | None, boundary: str | None, notes: list | None = None) -> dict:
     """The summary dict of one run (module docstring) from the engine's result R and what clean_yield chose."""
@@ -238,7 +250,8 @@ def build(R: dict, files: dict, dataset: dict, units: list, unit_note: str, deco
                                "scaled_columns")},
         },
         "columns": _columns(R, fields),
-        "files": {"clean_shp": files.get("difm_ready_shp"), "clean_zip": files.get("difm_ready_zip"),
+        "files": {"difm_shp": difm_files(files)[0], "difm_zip": difm_files(files)[1],
+                  "clean_shp": files.get("difm_ready_shp"), "clean_zip": files.get("difm_ready_zip"),
                   "flagged_shp": files.get("flagged_shp"), "flagged_zip": files.get("flagged_zip"),
                   "engine_json": files.get("json"), "output_dir": files.get("dir")},
         "warnings": list(R.get("warnings") or []),
@@ -290,6 +303,8 @@ def as_text(S: dict) -> str:
     for c in C["combines"]:
         L.append(f"  combine {c['combine']}: {_n(c['kept'])} of {_n(c['readings'])} readings kept, mean "
                  f"{_n(c['mean_dry_yield'], 2)} bu/ac")
+    if S["files"].get("difm_zip"):
+        L.append(f"for DIFM     {S['files']['difm_zip']}")
     L.append(f"clean file   {S['files']['clean_zip']}")
     for w in S["warnings"]:
         L.append(f"WARNING      {w}")

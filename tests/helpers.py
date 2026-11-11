@@ -3,9 +3,12 @@
 engine, to check the engine's limits and removals against it (every number in the tests is synthetic)."""
 from __future__ import annotations
 
+import datetime
 import json
 import math
 import os
+import struct
+import zipfile
 
 import numpy as np
 import pandas as pd
@@ -120,3 +123,72 @@ def assert_group_follows_the_method(d: pd.DataFrame, summary: dict, group: str):
         assert r["removed"] == len(bad)
     gone = set().union(*[e[5] for e in expected]) | set(d.index[rem.isin(BEFORE_THE_FILTERS)])
     assert set(d.index[d["Keep"] == 1]) == set(d.index) - gone
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# The shapefile for DIFM: the layout of an SMS shapefile export of a grain harvest (column, DBF field type), in order
+DIFM_LAYOUT = (("Field", "C"), ("Dataset", "C"), ("Product", "C"), ("Obj__Id", "N"), ("Distance_f", "N"),
+               ("Track_deg_", "N"), ("Duration_s", "N"), ("Elevation_", "N"), ("Time", "D"), ("Swth_Wdth_", "N"),
+               ("Y_Offset_f", "N"), ("Moisture__", "N"), ("Yld_Mass_W", "N"), ("Yld_Vol_We", "N"), ("Yld_Mass_D", "N"),
+               ("Yld_Vol_Dr", "N"), ("Speed_mph_", "N"), ("Date", "D"))
+SHAPEFILE_PARTS = (".shp", ".shx", ".dbf", ".prj")          # .cpg may come with them
+DBF_FIELDS_END = 0x0D                                       # the byte that closes the list of fields in the header
+
+
+def dbf_header(dbf: str) -> dict:
+    """The header of a .dbf read byte by byte, without a GIS library: the number of records, where they start, their
+    length, and for every field (name, type letter, length, decimals) in the order of the file."""
+    with open(dbf, "rb") as f:
+        n, start, reclen = struct.unpack("<4xIHH20x", f.read(32))
+        fields = []
+        while True:
+            d = f.read(32)
+            if len(d) < 32 or d[0] == DBF_FIELDS_END:
+                break
+            fields.append((d[:11].split(bytes(1), 1)[0].decode("ascii"), chr(d[11]), d[16], d[17]))
+    return {"records": n, "start": start, "record_length": reclen, "fields": fields}
+
+
+def dbf_raw_column(dbf: str, name: str) -> list:
+    """The characters of one field in every record, exactly as they are in the file."""
+    h = dbf_header(dbf)
+    at = 1                                                    # the first byte of a record is its deletion flag
+    for fname, _type, length, _dec in h["fields"]:
+        if fname == name:
+            break
+        at += length
+    else:
+        raise KeyError(name)
+    with open(dbf, "rb") as f:
+        f.seek(h["start"])
+        body = f.read(h["records"] * h["record_length"])
+    L = h["record_length"]
+    return [body[i * L + at:i * L + at + length].decode("ascii") for i in range(h["records"])]
+
+
+def assert_difm_layout(shp: str, zip_path: str) -> dict:
+    """The file is laid out as an SMS shapefile export: the eighteen columns in order with their DBF field types,
+    Obj__Id as an 18-wide whole number, Time and Date as true date fields holding the same valid date, WGS 84 with
+    the ESRI .prj, and a zip of the shapefile's parts and nothing else. Returns the .dbf header."""
+    stem = os.path.splitext(shp)[0]
+    for ext in SHAPEFILE_PARTS:
+        assert os.path.isfile(stem + ext), stem + ext
+    h = dbf_header(stem + ".dbf")
+    assert [(f[0], f[1]) for f in h["fields"]] == list(DIFM_LAYOUT)
+    by = {f[0]: f for f in h["fields"]}
+    assert by["Obj__Id"][2:] == (18, 0)
+    assert by["Time"][2] == 8 and by["Date"][2] == 8
+    assert h["records"] >= 30
+    dates = dbf_raw_column(stem + ".dbf", "Date")
+    for v in set(dates):
+        assert len(v) == 8 and v.isdigit(), v
+        datetime.date(int(v[:4]), int(v[4:6]), int(v[6:]))                   # a real calendar date
+    assert dbf_raw_column(stem + ".dbf", "Time") == dates
+    with open(stem + ".prj", encoding="ascii") as f:
+        prj = f.read()
+    assert prj.startswith('GEOGCS["GCS_WGS_1984"') and "PROJCS" not in prj
+    with zipfile.ZipFile(zip_path) as z:
+        names = z.namelist()
+    base = os.path.basename(stem)
+    assert set(names) - {base + ".cpg"} == {base + e for e in SHAPEFILE_PARTS}, names
+    return h
