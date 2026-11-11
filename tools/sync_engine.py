@@ -43,7 +43,9 @@ TEST_PKG = "tests.oced_synthetic"
 MANIFEST = os.path.join(DEST, "ENGINE_SOURCE.json")
 TEST_MANIFEST = os.path.join(TEST_DEST, "SOURCE.json")
 
-# the engine modules of the route raw data -> import as SMS -> SMS 3-sigma cleaning -> clean shapefile
+# the engine modules of the route raw data -> import as SMS -> SMS 3-sigma cleaning -> clean shapefile. The decoders
+# are listed here as they were when this was written; the sync adds every other decoder OCED's DECODERS list names
+# (decoders_of below), so a format OCED gains comes in without an edit here.
 ENGINE_FILES = [
     "engine/__init__.py",
     "engine/run.py",
@@ -199,6 +201,22 @@ def oced_version(oced: str, commit: str) -> str | None:
     return m.group(1) if m else None
 
 
+def decoders_of(detect_py: bytes) -> list[str]:
+    """The raw-format decoders OCED's engine/formats/detect.py names in its DECODERS list. The engine loads them by
+    name at run time (importlib), so no import line shows them: they are read from the list itself."""
+    for node in ast.parse(detect_py.decode("utf-8")).body:
+        if isinstance(node, ast.Assign) and any(getattr(t, "id", None) == "DECODERS" for t in node.targets):
+            try:
+                names = ast.literal_eval(node.value)
+            except ValueError:
+                break
+            if isinstance(names, (list, tuple)) and names and all(isinstance(n, str) for n in names):
+                return list(names)
+            break
+    raise SystemExit("engine/formats/detect.py has no DECODERS list of module names any more: the way OCED loads its "
+                     "decoders changed, review decoders_of() in tools/sync_engine.py")
+
+
 def sync(oced: str, ref: str, expect_subject: str | None, expect_version: str | None = None) -> int:
     oced = os.path.abspath(oced)
     commit = git(oced, "rev-parse", f"{ref}^{{commit}}").decode().strip()
@@ -219,8 +237,19 @@ def sync(oced: str, ref: str, expect_subject: str | None, expect_version: str | 
     if missing:
         raise SystemExit(f"commit {commit[:12]} has no {', '.join(missing)}: the engine's layout changed, review "
                          "ENGINE_FILES in tools/sync_engine.py")
+    # every decoder the engine names is copied, also one OCED gained after ENGINE_FILES was written
+    decoders = decoders_of(git(oced, "show", f"{commit}:engine/formats/detect.py"))
+    engine_files = list(ENGINE_FILES)
+    new_decoders = []
+    for fid in decoders:
+        p = f"engine/formats/{fid}.py"
+        if p not in listed:
+            raise SystemExit(f"commit {commit[:12]}: DECODERS names {fid!r} but there is no {p}")
+        if p not in engine_files:
+            engine_files.append(p)
+            new_decoders.append(fid)
     files, probs, vendored = {}, [], {}
-    for src in ENGINE_FILES:
+    for src in engine_files:
         raw = git(oced, "show", f"{commit}:{src}")
         data, applied = transform(src, raw)
         rel = src[len("engine/"):]
@@ -259,7 +288,7 @@ def sync(oced: str, ref: str, expect_subject: str | None, expect_version: str | 
                 "the files in this folder: change OCED and sync again.",
         "source_repository": remote, "commit": commit, "commit_subject": subject, "commit_date": date,
         "oced_version": version, "synced_at": _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "package": PKG,
+        "package": PKG, "decoders": decoders,
         "patches": [{"file": p, "what": w} for p, w, _o, _n, _c in PATCHES]
         + [{"file": "*", "what": f"import lines of the top-level package 'engine' renamed to '{PKG}'"},
            {"file": "report/clean_report.py", "what": "stub: no PDF report (OCED's engine/report is not copied)"}],
@@ -289,6 +318,9 @@ def sync(oced: str, ref: str, expect_subject: str | None, expect_version: str | 
         f.write("\n")
     print(f"synced OCED {version or '?'} ({commit[:12]} {subject!r}): {len(vendored)} engine files + the report stub "
           f"-> {os.path.relpath(DEST, ROOT)}; {len(tfiles)} test-support files -> {os.path.relpath(TEST_DEST, ROOT)}")
+    if new_decoders:
+        print(f"NEW decoder(s) in OCED, copied: {', '.join(new_decoders)}. Still to do by hand: a synthetic upload of "
+              "each in tests/test_raw_formats.py (its generator in TEST_FILES above), and the format in the README")
     return 0
 
 

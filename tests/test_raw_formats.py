@@ -14,6 +14,15 @@ from oced_clean._engine.formats import common
 from tests import helpers
 from tests.conftest import quiet
 
+HAVE_AN_UPLOAD_HERE = {"cnh_cn1", "jd_jdl", "jd_gs3_rcd"}       # the engine's decoders this file sends an upload to
+
+
+def test_every_decoder_of_the_engine_has_an_upload_here():
+    """A reminder for the day OCED gains a decoder: the sync copies it by itself, and this fails until a synthetic
+    upload of the new format goes through the route in this file."""
+    from oced_clean._engine.formats import detect
+    assert set(detect.DECODERS) == HAVE_AN_UPLOAD_HERE
+
 
 def _check(r, fmt, kind="raw"):
     S = r.summary

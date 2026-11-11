@@ -38,6 +38,7 @@ comes from.
 | The cleaning engine (`src/oced_clean/_engine/`) | **not in the repository yet** |
 | OCED's synthetic-data generators the tests use (`tests/oced_synthetic/`) | **not in the repository yet** |
 | The shapefile for DIFM, in the SMS shapefile export layout | **comes with the engine**; its layout and the test of it are here |
+| ISOXML task data (`TASKDATA.XML`) of a harvest as a fifth source | **comes with the engine**: OCED 0.3.0 adds a reader for it. The text below still says ISOXML is not read, and is changed when the engine is in |
 
 The engine and the generators are copied from OCED version 0.3.0 by `tools/sync_engine.py`. That version is being
 published; the copy is added here as soon as it is public.
@@ -634,6 +635,10 @@ The sync reads the files from the commit itself, applies the three changes liste
 PDF report) and writes `src/oced_clean/_engine/ENGINE_SOURCE.json` with the commit and the hash of every file. It
 stops with a message if OCED changed in a place one of those changes touches, or if a copied module starts to import
 a module that is not copied. `python tools/sync_engine.py --check` verifies that nobody edited the copy.
+
+A format OCED gains comes in by itself: the sync copies every decoder the engine's own list names, and says so. Two
+things are then left to do by hand, and a test fails until the first is done: a synthetic upload of the new format
+in `tests/test_raw_formats.py`, and the format in [Inputs](#inputs).
 
 After a sync, read the diff of `_engine/run.py` around `_cli`: `oced_clean/api.py` follows that function step by
 step, and `tests/test_parity.py` fails if the two drift apart.
