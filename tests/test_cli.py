@@ -48,6 +48,38 @@ def test_quiet_json_says_nothing_else(field, tmp_path, capsys):
     assert os.path.basename(d["clean_zip"]).startswith("job42") and sorted(os.listdir(tmp_path / "run")) == ["output"]
 
 
+def test_grower_weight_and_the_yield_for_difm(field, field_run, tmp_path, capsys):
+    """A made-up grower's yield 4 % above the monitor's average: the adjusted file by default, the monitor one asked
+    for."""
+    weight = ["--grower-weight", f"{1.04 * field_run.summary['result']['average_area_weighted']:.2f}",
+              "--weight-unit", "bu/ac", "--weight-basis", "dry"]
+    base = ["clean", field["shp"], "--boundary", field["boundary"], "--quiet"]
+    rc = cli.main([*base, "--out", str(tmp_path / "adjusted"), "--json", *weight])
+    d = json.loads(capsys.readouterr().out)
+    assert rc == 0 and d["difm_yield"] == "adjusted" and d["yield_column"] == "Yld_Level"
+    assert d["difm_zip"].endswith("_sms3s_clean_adjusted_DIFM.zip") and os.path.isfile(d["difm_zip"])
+    assert d["summary"]["adjustment"]["grower_weight"]["unit"] == "bu/ac"
+    rc = cli.main([*base, "--out", str(tmp_path / "monitor"), "--difm-yield", "monitor", *weight])
+    out = capsys.readouterr().out
+    assert rc == 0 and "grower's weight" in out and "level factor" in out
+    assert "_sms3s_clean_DIFM.zip" in out and "monitor yield (Yld_Vol_Dr of the clean file)" in out
+
+
+def test_adjustment_options_are_checked(field, tmp_path, capsys):
+    rc = cli.main(["clean", field["shp"], "--boundary", field["boundary"], "--out", str(tmp_path / "run"), "--json",
+                   "--difm-yield", "adjusted"])
+    cap = capsys.readouterr()
+    assert rc == 2 and "needs an adjustment" in json.loads(cap.out)["error"] and not (tmp_path / "run").exists()
+    try:
+        cli.main(["clean", field["shp"], "--boundary", field["boundary"], "--out", str(tmp_path / "run"),
+                  "--combine-factor", "pairs"])
+    except SystemExit as e:                                # argparse: not one of the methods
+        assert e.code == 2
+    else:
+        raise AssertionError("a combine-factor method that does not exist must be refused")
+    assert "--combine-factor" in capsys.readouterr().err
+
+
 def test_input_problem_is_exit_code_2(field, tmp_path, capsys):
     rc = cli.main(["clean", str(tmp_path / "missing.zip"), "--no-boundary", "--out", str(tmp_path / "run"), "--json"])
     cap = capsys.readouterr()

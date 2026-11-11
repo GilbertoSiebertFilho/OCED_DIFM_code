@@ -53,9 +53,9 @@ def parser() -> argparse.ArgumentParser:
                     "yield; mean +/- 3 SD recomputed before every step; one group per combine).")
     sub = ap.add_subparsers(dest="command", required=True)
 
-    c = sub.add_parser("clean", help="clean an upload and write the clean shapefile",
-                       description="Clean an upload. The clean shapefile (zipped) and the summary land in "
-                                   "<out>/output/.")
+    c = sub.add_parser("clean", help="clean an upload and write the shapefile for DIFM",
+                       description="Clean an upload. The shapefile for DIFM (zipped), the full clean shapefile and "
+                                   "the summary land in <out>/output/.")
     c.add_argument("inputs", nargs="+", help="the uploaded file(s), folder(s) or zip(s): a .cn1 card, a GreenStar 3 "
                    "card, a JD-Data folder of .jdl logs, an Operations Center export, or a yield point shapefile")
     b = c.add_mutually_exclusive_group(required=True)
@@ -85,6 +85,25 @@ def parser() -> argparse.ArgumentParser:
                    "default, as in SMS)")
     c.add_argument("--group-by", choices=list(api.GROUP_MODES), default=None, help="where the mean and SD are "
                    "computed: auto (default) = one group per combine; task = one group per task; machine; field")
+    c.add_argument("--grower-weight", type=float, default=None, metavar="VALUE", help="after the cleaning: the weight "
+                   "the grower got for the field (scale ticket), in --weight-unit; the map is leveled to it")
+    c.add_argument("--weight-unit", choices=list(api.WEIGHT_UNITS), default="lb", help="unit of --grower-weight "
+                   "(default lb; t = metric tonne; bu/ac = the grower's yield per acre)")
+    c.add_argument("--weight-basis", choices=list(api.WEIGHT_BASES), default="wet", help="wet (default): the scale "
+                   "weighed the grain as harvested; dry: the weight is already at the dry moisture")
+    c.add_argument("--weight-moisture", type=float, default=None, metavar="PCT", help="moisture of the weighed grain, "
+                   "when the ticket gives it (wet basis only)")
+    c.add_argument("--weight-area-ac", type=float, default=None, metavar="AC", help="with --weight-unit bu/ac: the "
+                   "acres the grower's yield is over (default: the boundary's area)")
+    c.add_argument("--combine-factor", choices=list(api.FACTOR_METHODS), default=None, metavar="METHOD",
+                   help="after the cleaning, several combines: compute OCED's combine factor and apply it where it is "
+                        "proven. METHOD: auto (the paired cells where the combines met on interleaved or mixed "
+                        "passes), cells, track, point or machine. Without this option: no factor")
+    c.add_argument("--reference-combine", default=None, metavar="ID", help="with --combine-factor: the combine the "
+                   "others are brought to (default: the one with the most kept readings)")
+    c.add_argument("--difm-yield", choices=list(api.DIFM_YIELDS), default=None, help="the yield in the shapefile for "
+                   "DIFM: monitor = the SMS 3-sigma sequence alone; adjusted = with the combine factor and the "
+                   "grower's weight (default: adjusted when the cleaning adjusted something, monitor otherwise)")
     c.add_argument("--tag", default=None, help="name prefix of the output files")
     c.add_argument("--cleanup", action="store_true", help="remove input/, decoded/ and sections/ from --out at the end")
     c.add_argument("--json", action="store_true", help="print the result as one JSON document on standard output")
@@ -115,8 +134,11 @@ def _run_clean(a) -> int:
         a.inputs, None if a.no_boundary else a.boundary, a.out, boundary_feature=_feature(a.boundary_feature),
         candidate=a.candidate, units=_units(a.units), field=a.field, year=a.year, allow_mixed=a.allow_mixed,
         product=a.product, weight_to_volume=a.weight_to_volume, dry_moisture=a.dry_moisture, min_yield=a.min_yield,
-        max_yield=a.max_yield, expand_dry_moisture=a.expand_dry_moisture, group_by=a.group_by, tag=a.tag,
-        cleanup=a.cleanup, log=_log(a))
+        max_yield=a.max_yield, expand_dry_moisture=a.expand_dry_moisture, group_by=a.group_by,
+        grower_weight=a.grower_weight, weight_unit=a.weight_unit, weight_basis=a.weight_basis,
+        weight_moisture=a.weight_moisture, weight_area_ac=a.weight_area_ac,
+        combine_factor=a.combine_factor or False, reference_combine=a.reference_combine, difm_yield=a.difm_yield,
+        tag=a.tag, cleanup=a.cleanup, log=_log(a))
     if a.json:
         print(json.dumps({"ok": True, **r.to_dict()}, indent=1))
     else:

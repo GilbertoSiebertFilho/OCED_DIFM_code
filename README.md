@@ -12,9 +12,9 @@ raw upload (.cn1 card, GreenStar 3 card, JD-Data .jdl logs, Operations Center ex
         |
         v
    oced-clean        import as SMS  ->  clip  ->  Optimize Swath Widths  ->  moisture  ->  speed  ->  dry yield
-        |
+        |            on request, after the cleaning:  combine factor,  level of the grower's weight
         v
-the shapefile for DIFM (zip, SMS shapefile export layout)  +  <tag>_sms3s_summary.json
+the shapefile for DIFM (zip, SMS shapefile export layout; monitor or adjusted yield)  +  <tag>_sms3s_summary.json
         |
         v
 the existing pipeline, where the SMS shapefile export goes today
@@ -38,6 +38,7 @@ comes from.
 | The cleaning engine (`src/oced_clean/_engine/`) | **not in the repository yet** |
 | OCED's synthetic-data generators the tests use (`tests/oced_synthetic/`) | **not in the repository yet** |
 | The shapefile for DIFM, in the SMS shapefile export layout | **comes with the engine**; its layout and the test of it are here |
+| The choice of the yield in it: the monitor's, or adjusted with the combine factor and the grower's weight | written (`difm_yield`); the engine's writer of the adjusted file **comes with the engine** |
 | ISOXML task data (`TASKDATA.XML`) of a harvest as a fifth source | **comes with the engine**: OCED 0.3.0 adds a reader for it. The text below still says ISOXML is not read, and is changed when the engine is in |
 
 The engine and the generators are copied from OCED version 0.3.0 by `tools/sync_engine.py`. That version is being
@@ -53,20 +54,22 @@ Done so far, on the developer's computer, with the 0.3.0 engine before its publi
 
 - the route ran from the upload to the clean shapefile on synthetic uploads of all four sources (a `.cn1` card, a
   GreenStar 3 card, Gen4 `.jdl` logs, an Operations Center export);
-- 46 of the first 50 tests passed, among them the comparison of this package with the engine's own command line,
-  byte for byte, for every source. The other four check the copied engine itself (its manifest, and that a run
-  loads no plotting library) and can only run once the copy is in;
-- the 16 tests of the shapefile for DIFM were added afterwards and have not run against an engine yet: the engine
-  used so far does not write that file. The checker they use was tried on hand-made files (it passes a file in the
-  layout, and refuses dates written as text and columns in another order).
+- of the 103 tests, 86 passed. Among them: the comparison of this package with the engine's own command line, byte
+  for byte, for every source and with a grower's weight and a combine factor; and the shapefile for DIFM with the
+  monitor's yield (its layout, its name, its readings against the full clean file) for a point export, two
+  combines, a `.cn1` card and Gen4 logs;
+- 13 fail, all at one place: the adjusted file. The engine used here does not write it yet, and the call this
+  package makes for it is the provisional one named below;
+- 4 check the copied engine itself (its manifest, and that a run loads no plotting library) and can only run once
+  the copy is in.
 
 Still to do once the engine is in: the full test run, an install into a clean environment, the byte-for-byte
 comparison with OCED on real raw data, an upload of the shapefile for DIFM to the platform, and a run on Linux
 (see [Limits](#limits)).
 
-Until then, read this document as the description of what the package does and how it is called. One thing is
-still open in the interface: the file name of the shapefile for DIFM, which OCED's engine decides. Take its path
-from `result.difm_zip`, not from a name pattern.
+Until then, read this document as the description of what the package does and how it is called. One call in the
+code is provisional and marked so: how the engine is asked for the adjusted file (`_write_difm` in
+`src/oced_clean/api.py`), written before that part of OCED was published.
 
 ## Contents
 
@@ -139,11 +142,25 @@ import oced_clean
 
 result = oced_clean.clean_yield(["upload.zip"], "boundary.geojson", "work/job_123")
 result.difm_zip         # the shapefile for DIFM, zipped: the clean readings in the SMS shapefile export layout
+result.difm_yield       # the yield in it: "monitor" here (nothing was adjusted)
 result.clean_zip        # the full clean file, with OCED's extra columns (for checking, not for the upload)
-result.yield_column     # the column to map as the dry yield, bu/ac ("Yld_Vol_Dr" for raw data)
 result.summary          # dict: what was read, the import settings, every step with its limits and counts
 print(result.text())    # the same as a short text report
 ```
+
+With the grower's weight and the combine factor (see [Adjustments](#3-adjustments-after-the-cleaning-on-request)):
+
+```python
+result = oced_clean.clean_yield(["upload.zip"], "boundary.geojson", "work/job_124",
+                                grower_weight=1_500_000, weight_unit="lb", combine_factor=True)
+result.difm_yield       # "adjusted": the yield in the shapefile for DIFM is leveled to the weight
+```
+
+```bash
+oced-clean clean upload.zip --boundary boundary.geojson --out work/job_124 --grower-weight 1500000 --combine-factor auto
+```
+
+`difm_yield="monitor"` / `--difm-yield monitor` keeps the monitor's yield in the file whatever was adjusted.
 
 For another program (R, a shell script, a job runner), `--json` prints one JSON document on standard output and
 sends the progress lines to standard error:
@@ -263,6 +280,39 @@ combine and day for John Deere logs); `group_by="field"` makes one unit of every
 These rules are fixed. The order of moisture and speed, the 3 SD, the 25 % and the rounding are not parameters of
 this package.
 
+### 3. Adjustments after the cleaning (on request)
+
+Two corrections of OCED can follow the cleaning. Neither runs unless it is asked for, and neither changes which
+readings are kept or any column of the monitor: each adds a column to the full clean file.
+
+| Adjustment | Asked for with | What it does | Column added |
+|---|---|---|---|
+| Combine factor | `combine_factor=True` (several combines) | Compares the combines where they harvested side by side and, where the difference is proven, multiplies the dry yield of each combine by its factor, the reference combine staying at 1. | `Yld_Harm` |
+| Grower's weight | `grower_weight=...` | Level factor = the grower's weight / the monitor's total over the same readings, compared as a mass. The dry yield (after the combine factor, when one was applied) is multiplied by it, so the map adds up to the weight. | `Yld_Level` |
+
+The combine factor is applied only when OCED's own conditions hold; they are the engine's, not parameters here. In
+short, with the default method (`auto`): the combines met on interleaved or mixed passes, the factor differs from 1
+by more than 1 % and at most 10 %, its confidence interval excludes 1, and one factor fits both halves of the field.
+Where the combines cut the field in blocks no factor is applied, because the machine and the ground cannot be told
+apart; the grower's weight then levels the whole field. `combine_factor="machine"` applies the ratio of the
+whole-field means anyway, which OCED marks as a red light. `summary["adjustment"]` gives the factor of every
+combine and the engine's sentence on why it was or was not applied.
+
+The grower's weight is the scale ticket of the field: `weight_unit` lb, kg, t (metric tonne), bu or bu/ac;
+`weight_basis` wet (as harvested) or dry (already at the dry moisture); `weight_moisture` when the ticket gives it.
+A weight is compared as a mass, in the bushel of the file itself.
+
+**Which yield goes to DIFM** is `difm_yield`:
+
+| `difm_yield` | The shapefile for DIFM carries | File name |
+|---|---|---|
+| `"monitor"` | the monitor's yield after the SMS 3-sigma sequence, nothing else | `<tag>_sms3s_clean_DIFM.zip` |
+| `"adjusted"` | the adjusted yield: `Yld_Vol_Dr` is the adjusted column, and `Yld_Mass_D`, `Yld_Mass_W` and `Yld_Vol_We` are multiplied by the same factor, reading by reading; every other column is unchanged | `<tag>_sms3s_clean_adjusted_DIFM.zip` |
+| not given | adjusted when the cleaning adjusted something, monitor otherwise | |
+
+`"adjusted"` without `grower_weight` or `combine_factor` is refused. Asked for but nothing was applied (a factor
+that is not proven), the file is the monitor one; `result.difm_yield` and `summary["difm_file"]` say which it is.
+
 ## Outputs
 
 Everything lands in the work folder given as `out_dir` / `--out`:
@@ -272,7 +322,8 @@ Everything lands in the work folder given as `out_dir` / `--out`:
   input/      the upload, unpacked
   decoded/    <tag>_decoded.shp    every reading decoded from the raw data (raw uploads only)
               <tag>_imported.shp   the readings after the import as SMS: the input of the cleaning
-  output/     the shapefile for DIFM  .shp .shx .dbf .prj (.cpg) and .zip    the upload: result.difm_zip
+  output/     <tag>_sms3s_clean_DIFM.zip                     the upload (result.difm_zip), monitor's yield; or
+              <tag>_sms3s_clean_adjusted_DIFM.zip            the upload with the adjusted yield
               <tag>_sms3s_clean.shp  .shx .dbf .prj .cpg     the full clean file
               <tag>_sms3s_clean.zip                          the same five files, zipped
               <tag>_sms3s_flagged.shp ... and .zip           every reading inside the boundary, kept or not
@@ -285,9 +336,11 @@ with `tag`. `cleanup=True` / `--cleanup` removes `input/` and `decoded/` at the 
 
 ### The shapefile for DIFM
 
-`result.difm_zip` (and `result.difm_shp`). The kept readings, one point each: the same readings, positions and
-values as the full clean file below, written the way Ag Leader SMS writes a shapefile export of a grain harvest.
-The columns, in this order:
+`result.difm_zip`: one zip, written by OCED's engine next to the full clean file and named after it
+(`<tag>_sms3s_clean_DIFM.zip`, or `<tag>_sms3s_clean_adjusted_DIFM.zip` with the adjusted yield; `result.difm_yield`
+says which). The kept readings, one point each: the same readings, in the same order and at the same positions as
+the full clean file below, written the way Ag Leader SMS writes a shapefile export of a grain harvest. The columns,
+in this order:
 
 | # | Column | DBF type | Unit | Meaning |
 |---|---|---|---|---|
@@ -299,24 +352,28 @@ The columns, in this order:
 | 6 | `Track_deg_` | N | degrees | heading, clockwise from north |
 | 7 | `Duration_s` | N | s | time the reading stands for |
 | 8 | `Elevation_` | N | ft | GNSS altitude |
-| 9 | `Time` | D (date) | | local harvest date of the reading, the date only |
+| 9 | `Time` | D (date) | | date of the reading, the date only |
 | 10 | `Swth_Wdth_` | N | ft | swath width after Optimize Swath Widths |
 | 11 | `Y_Offset_f` | N | ft | lateral offset; 0 when there is none |
 | 12 | `Moisture__` | N | % | grain moisture, wet basis |
-| 13 | `Yld_Mass_W` | N | lb/ac | wet mass per area |
-| 14 | `Yld_Vol_We` | N | bu/ac | wet volume |
-| 15 | `Yld_Mass_D` | N | lb/ac | mass per area at the dry moisture |
-| 16 | `Yld_Vol_Dr` | N | bu/ac | **dry yield: the column to analyse** |
+| 13 | `Yld_Mass_W` | N | lb/ac | wet mass per area (×) |
+| 14 | `Yld_Vol_We` | N | bu/ac | wet volume (×) |
+| 15 | `Yld_Mass_D` | N | lb/ac | mass per area at the dry moisture (×) |
+| 16 | `Yld_Vol_Dr` | N | bu/ac | **dry yield: the column to analyse** (×) |
 | 17 | `Speed_mph_` | N | mph | ground speed |
-| 18 | `Date` | D (date) | | local harvest date |
+| 18 | `Date` | D (date) | | date of the reading |
 
+- (×) In the adjusted file these four columns carry the adjustment: `Yld_Vol_Dr` is the adjusted yield of the full
+  clean file (`Yld_Harm` or `Yld_Level`), and the other three are multiplied by the same factor, reading by reading.
+  In the monitor file they are the monitor's values as cleaned. Every other column is the same in both.
 - Coordinates are WGS 84, and the `.prj` is the ESRI definition `GCS_WGS_1984`.
 - `Time` and `Date` are true DBF date fields (type `D`, eight characters, `YYYYMMDD`), not text.
-- The zip holds `.shp`, `.shx`, `.dbf`, `.prj` and, when written, `.cpg`, with nothing else and no folder.
-- No other column is in it. What OCED adds (the combine id, the day, the session, the swath width as logged) is in
-  the full clean file and in the summary.
+- The zip holds `.shp`, `.shx`, `.dbf`, `.prj` and `.cpg`, named as the zip, with nothing else and no folder.
+- No other column is in it. What OCED adds (the combine id, the day, the session, the swath width as logged, the
+  adjusted yields beside the monitor's) is in the full clean file and in the summary.
 
-`tests/test_difm_file.py` checks every line of this on a synthetic upload, reading the `.dbf` header itself.
+`tests/test_difm_file.py` checks every line of this on synthetic uploads, reading the zip and the `.dbf` header
+itself, for the monitor file and for the adjusted one.
 
 ### The full clean shapefile
 
@@ -356,6 +413,9 @@ Added by the cleaning, after the columns above:
 | `Session` | combine and day |
 | `Wdth_Raw` | the swath width as logged, before Optimize Swath Widths |
 | `Swath_Scl` | old area / new area of the reading in Optimize Swath Widths (1 = unchanged) |
+| `Yld_Harm` | only when a combine factor was applied: the dry yield × the factor of the reading's combine |
+| `Yld_Level` | only with a grower's weight: the dry yield × the combine factor × the level factor |
+| `Yld_Lvl_Sy` | only with a grower's weight: `Yld_Dry_Sy` leveled the same way. A diagnostic, as `Yld_Dry_Sy` is |
 | `Plot_Id`, `Tgt_Rate` | only when the boundary is a trial design: the plot and its target rate |
 
 A point file that was uploaded as a shapefile (an Operations Center export, an SMS export) keeps its own columns,
@@ -408,8 +468,10 @@ The keys of the summary:
 | `cleaning.steps[]` | one row per step and group, in the order they ran: `step`, `name`, `group`, `attribute`, `unit`, `readings_before`, `mean`, `sd`, `lower`, `upper`, `removed`, `remaining`, and for S3 to S5 `sd_after`, `sd_drop_pct`, `no_value` |
 | `cleaning.combines[]` | per combine: `readings`, `kept`, `days`, `mean_dry_yield` |
 | `result` | `yield_column`, `readings`, `area_ac`, `mean`, `average_area_weighted` (total / area, the "Avg. Yield" of an SMS summary), `median`, `sd`, `min`, `max`, `coordinate_system`, `added_columns`, `swath_changes` |
-| `columns` | which column of the full clean file holds what, with its unit: `yield_volume_dry`, `yield_mass_dry`, `yield_volume_wet`, `yield_mass_wet`, `moisture`, `swath_width`, `distance`, `speed`, `heading`, `duration`, `time`, `elevation`, `harvester_id`, `dataset`. The shapefile for DIFM needs no such list: its columns are always the eighteen above |
-| `files` | the paths of the shapefile for DIFM (`difm_shp`, `difm_zip`), of the full clean and flagged files and of the engine's record |
+| `adjustment` | what was done after the cleaning. `combine_factor` (`null` when not asked for): `method_asked`, `method_used`, `reference`, `factors` (per combine; 1 = none), `applied`, `decision` (the engine's sentence per combine). `grower_weight` (`null` when none was given): the weight as given, `weight_lb`, `weight_bu`, `bushel_lb`, `monitor_total_bu`, `level_factor`, `level_factor_after_combine_factor`. `column`: the adjusted yield of the full clean file, `null` when nothing was applied |
+| `difm_file` | the shapefile for DIFM: `zip` (its name), `yield` (`adjusted` or `monitor`), `yield_asked`, `yield_column_of_the_clean_file`, `layout`, `readings`, `fields`, `date_from`, `readings_without_date`, and the writer's `notes` and `warnings` |
+| `columns` | which column of the full clean file holds what, with its unit: `yield_volume_dry` (the monitor's), `yield_volume_dry_adjusted` (only when something was adjusted), `yield_mass_dry`, `yield_volume_wet`, `yield_mass_wet`, `moisture`, `swath_width`, `distance`, `speed`, `heading`, `duration`, `time`, `elevation`, `harvester_id`, `dataset`. The shapefile for DIFM needs no such list: its columns are always the eighteen above |
+| `files` | the paths of the shapefile for DIFM (`difm_zip`), of the full clean and flagged files and of the engine's record |
 | `warnings`, `checks`, `notes` | what the engine wants a person to read. `warnings` matter: a combine whose points sit beside its strip, readings with no moisture value, a crop the table does not know |
 
 ## Calling it from the DIFM pipeline
@@ -454,6 +516,9 @@ Notes for the integration:
   | Elevation | `Elevation_`, ft |
   | Date | `Date` (and `Time`, the same date) |
 
+- **Monitor or adjusted yield.** The mapping above is the same for both files: the adjusted yield is in the same
+  columns. When the platform has the grower's weight of the field, pass it as `grower_weight`; with several
+  combines, `combine_factor=True`. Keep `result.difm_yield` with the job, so a report can say which yield it used.
 - **Harvester id.** The SMS export layout has no column for the combine, so the shapefile for DIFM has none. The
   combine of every reading is in `Machine` of the full clean file (its serial number, for a raw upload), and
   `summary["cleaning"]["combines"]` lists the combines with their counts and means. A later step that works per
@@ -478,8 +543,8 @@ out <- system2("oced-clean",
                stdout = TRUE)
 res <- jsonlite::fromJSON(paste(out, collapse = "\n"))
 if (!isTRUE(res$ok)) stop(res$error)
-yield_zip <- res$difm_zip
-yield_col <- res$yield_column
+yield_zip  <- res$difm_zip
+yield_kind <- res$difm_yield      # "monitor" or "adjusted"
 ```
 
 The exit code is 0 on success, 2 for a problem with the input, 3 for an unexpected error. With `--json` the document
@@ -516,13 +581,21 @@ is cleaned. In Python: `oced_clean.inspect_upload(inputs, work_dir, boundary)`.
 | `max_yield` | `--max-yield BU` | by source | import: maximum yield volume, bu/ac |
 | `expand_dry_moisture` | `--expand-dry-moisture` | off | import: raise grain drier than the dry moisture to it |
 | `group_by` | `--group-by` | `auto` | cleaning units: `auto` (per combine), `task`, `machine`, `field` |
+| `grower_weight` | `--grower-weight VALUE` | none | adjustment: the weight the grower got for the field, in `weight_unit` |
+| `weight_unit` | `--weight-unit` | `lb` | `lb`, `kg`, `t` (metric tonne), `bu`, `bu/ac` (the grower's yield per acre) |
+| `weight_basis` | `--weight-basis` | `wet` | `wet` (as harvested) or `dry` (already at the dry moisture) |
+| `weight_moisture` | `--weight-moisture PCT` | none | moisture of the weighed grain, when the ticket gives it (wet basis only) |
+| `weight_area_ac` | `--weight-area-ac AC` | the boundary's area | with `bu/ac`: the acres the grower's yield is over |
+| `combine_factor` | `--combine-factor METHOD` | off | adjustment, several combines: `True` / `auto`, or `cells`, `track`, `point`, `machine` |
+| `reference_combine` | `--reference-combine ID` | most kept readings | the combine the others are brought to |
+| `difm_yield` | `--difm-yield` | adjusted when something was adjusted | the yield in the shapefile for DIFM: `monitor` or `adjusted` |
 | `tag` | `--tag T` | from the data | name prefix of the output files |
 | `cleanup` | `--cleanup` | off | remove `input/`, `decoded/` and `sections/` at the end |
 | `log` | `--quiet`, `--json` | logging | Python: a function taking one text line (default `logging.getLogger("oced_clean").info`) |
 
-`clean_yield` returns a `CleanResult`: `difm_shp`, `difm_zip`, `clean_shp`, `clean_zip`, `flagged_shp`,
-`flagged_zip`, `yield_column`, `summary`, `summary_json`, `engine_json`, `out_dir`, and the methods `text()` and
-`to_dict()`.
+`clean_yield` returns a `CleanResult`: `difm_zip`, `difm_yield`, `clean_shp`, `clean_zip`, `flagged_shp`,
+`flagged_zip`, `yield_column` (the yield to map in the full clean file: `Yld_Vol_Dr`, or the adjusted column),
+`summary`, `summary_json`, `engine_json`, `out_dir`, and the methods `text()` and `to_dict()`.
 
 `oced_clean.inspect_upload(inputs, work_dir, boundary=None, boundary_feature=None)` returns
 `{"datasets": [...], "notes": [...], "message": str}`.
@@ -544,6 +617,7 @@ bug or a broken file.
 | Fewer than 30 readings left after the cleaning | `ValueError` naming the step that removed the most; no clean file |
 | The boundary file holds several field boundaries | `CleaningError` asking for `boundary_feature` |
 | An unknown `product`, a setting out of range | `ValueError` |
+| An adjustment option that does not fit (`difm_yield="adjusted"` with no weight and no combine factor, a moisture with a dry-basis weight, an unknown unit or method) | `CleaningError`, before anything is read or written |
 
 Command line: exit code 0 = done; 2 = one of the above (one line on standard error; with `--json` also
 `{"ok": false, "error": ..., "error_type": ...}` on standard output); 3 = unexpected error, with the traceback in
@@ -572,9 +646,13 @@ Read these before relying on the package.
   speed (a simulator, a test bench) gives limits such as 4.47 to 4.47 and loses its readings. Real harvests do not
   do this.
 - **At least 30 readings** must survive, or no clean file is written.
-- **Not in this package** (they are in the OCED app): the grower's scale weight and the level factor, the combine
-  factor between machines, the cleaning of planter and sprayer files, the PDF report and the maps, writing the clean
-  data back in the monitor's own format.
+- **Not in this package** (they are in the OCED app): a scale weight per combine, the grower's weight used only as
+  a check without leveling the map, the finer settings of the combine factor (its largest accepted size, whether
+  the weight may confirm a larger one), the cleaning of planter and sprayer files, the PDF report and the maps,
+  writing the clean data back in the monitor's own format.
+- **The adjustments are OCED's, not SMS's.** The SMS 3-sigma sequence is what was compared with Ag Leader SMS. The
+  combine factor and the level of the grower's weight come after it and are not part of that comparison; the
+  monitor's yield can always be asked for (`difm_yield="monitor"`).
 - **Options that are not established against SMS** are not exposed: moving a combine's points sideways before the
   swath step, and running the swath step per combine. The engine reports a combine whose points sit a foot or more
   beside the strip it cut as a warning in the summary; read it.
@@ -593,10 +671,10 @@ repository, and none may be added.
 | File | Checks |
 |---|---|
 | `tests/test_route.py` | the files written, the summary, the clip against the geometry, the import's minimum, the columns |
-| `tests/test_difm_file.py` | the shapefile for DIFM: the eighteen columns in order, their DBF types read from the file header, the two date fields, the `.prj`, the zip, and that it holds the readings and values of the full clean file |
+| `tests/test_difm_file.py` | the shapefile for DIFM: the eighteen columns in order, their DBF types read from the file header, the two date fields, the `.prj`, the zip and its name, and that it holds the readings and values of the full clean file. The adjusted file: `Yld_Vol_Dr` is the adjusted column, the three other yield columns carry the same factor reading by reading, and every other field is byte for byte the monitor file's. The monitor file of a run with a grower's weight: the same records as the file of a run without one |
 | `tests/test_rules.py` | the rules, against a second statement of them written in `tests/helpers.py`: order, mean ± 3 SD recomputed before every step, the 25 % rule, one unit per combine, per task, per field |
 | `tests/test_raw_formats.py` | one synthetic upload per format through the whole route: `.cn1` card (also in capitals, also zipped), Gen4 `.jdl` logs, GreenStar 3 card, Operations Center export by section |
-| `tests/test_parity.py` | `clean_yield` against the engine's own command line: the clean and flagged shapefiles byte for byte, for every format |
+| `tests/test_parity.py` | `clean_yield` against the engine's own command line: the clean and flagged shapefiles byte for byte, for every format, and with a grower's weight and a combine factor |
 | `tests/test_errors.py` | every refusal in the table above |
 | `tests/test_cli.py` | the command line, `--json`, the exit codes |
 | `tests/test_lean.py` | a run loads no plotting, PDF or image library and writes no figure |

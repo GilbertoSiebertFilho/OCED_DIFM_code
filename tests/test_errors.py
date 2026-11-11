@@ -80,6 +80,27 @@ def test_wrong_options(field, tmp_path):
         oced_clean.clean_yield([], field["boundary"], str(tmp_path / "c"), log=quiet)
 
 
+@pytest.mark.parametrize("options, says", [
+    ({"difm_yield": "leveled"}, "difm_yield must be"),
+    ({"difm_yield": "adjusted"}, "needs an adjustment"),
+    ({"combine_factor": "pairs"}, "combine_factor must be"),
+    ({"reference_combine": "COMBINE-A"}, "switch the factor on"),
+    ({"grower_weight": 0}, "grower_weight must be a number above 0"),
+    ({"grower_weight": "a lot"}, "grower_weight must be a number above 0"),
+    ({"grower_weight": 1000.0, "weight_unit": "tons"}, "weight_unit must be"),
+    ({"grower_weight": 1000.0, "weight_basis": "damp"}, "weight_basis must be"),
+    ({"grower_weight": 1000.0, "weight_basis": "dry", "weight_moisture": 14.0}, "only goes with weight_basis='wet'"),
+    ({"grower_weight": 1000.0, "weight_moisture": 140.0}, "weight_moisture must be a number above 0 and below 100"),
+    ({"grower_weight": 1000.0, "weight_area_ac": 80.0}, "only goes with weight_unit='bu/ac'"),
+    ({"weight_moisture": 14.0}, "give grower_weight too"),
+])
+def test_wrong_adjustment_options(options, says, field, tmp_path):
+    """Refused before anything is read or written."""
+    with pytest.raises(oced_clean.CleaningError, match=says):
+        oced_clean.clean_yield([field["shp"]], field["boundary"], str(tmp_path / "run"), log=quiet, **options)
+    assert not (tmp_path / "run").exists()
+
+
 def test_too_few_readings_left(tmp_path):
     """A card with a handful of readings inside the boundary: the engine refuses to write a clean file."""
     C = synthetic_cn1.make_card(str(tmp_path / "upload"))

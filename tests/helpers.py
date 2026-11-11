@@ -166,10 +166,29 @@ def dbf_raw_column(dbf: str, name: str) -> list:
     return [body[i * L + at:i * L + at + length].decode("ascii") for i in range(h["records"])]
 
 
-def assert_difm_layout(shp: str, zip_path: str) -> dict:
-    """The file is laid out as an SMS shapefile export: the eighteen columns in order with their DBF field types,
-    Obj__Id as an 18-wide whole number, Time and Date as true date fields holding the same valid date, WGS 84 with
-    the ESRI .prj, and a zip of the shapefile's parts and nothing else. Returns the .dbf header."""
+def unpack_difm(zip_path: str, folder: str) -> str:
+    """Unpacks the zip of the shapefile for DIFM into `folder` and returns the path of its .shp. The zip holds the
+    parts of one shapefile, named as the zip, and nothing else."""
+    base = os.path.splitext(os.path.basename(zip_path))[0]
+    with zipfile.ZipFile(zip_path) as z:
+        names = z.namelist()
+        assert set(names) - {base + ".cpg"} == {base + e for e in SHAPEFILE_PARTS}, names
+        z.extractall(folder)
+    return os.path.join(folder, base + ".shp")
+
+
+def dbf_records(dbf: str) -> bytes:
+    """The records of a .dbf, without its header (which carries the date the file was written)."""
+    h = dbf_header(dbf)
+    with open(dbf, "rb") as f:
+        f.seek(h["start"])
+        return f.read(h["records"] * h["record_length"])
+
+
+def assert_difm_layout(shp: str) -> dict:
+    """The (unpacked) file is laid out as an SMS shapefile export: the eighteen columns in order with their DBF field
+    types, Obj__Id as an 18-wide whole number, Time and Date as true date fields holding the same valid date, and
+    WGS 84 with the ESRI .prj. Returns the .dbf header."""
     stem = os.path.splitext(shp)[0]
     for ext in SHAPEFILE_PARTS:
         assert os.path.isfile(stem + ext), stem + ext
@@ -187,8 +206,4 @@ def assert_difm_layout(shp: str, zip_path: str) -> dict:
     with open(stem + ".prj", encoding="ascii") as f:
         prj = f.read()
     assert prj.startswith('GEOGCS["GCS_WGS_1984"') and "PROJCS" not in prj
-    with zipfile.ZipFile(zip_path) as z:
-        names = z.namelist()
-    base = os.path.basename(stem)
-    assert set(names) - {base + ".cpg"} == {base + e for e in SHAPEFILE_PARTS}, names
     return h

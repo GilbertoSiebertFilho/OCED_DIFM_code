@@ -3,8 +3,9 @@
 
     import oced_clean
     result = oced_clean.clean_yield(["upload.zip"], "boundary.geojson", "work/job_123")
-    result.clean_zip        # the clean shapefile, zipped: the yield file of the existing pipeline
-    result.yield_column     # the column to map as the dry yield (bu/ac)
+    result.difm_zip         # the shapefile for DIFM, zipped: the yield file of the existing pipeline
+    result.difm_yield       # the yield in it: "monitor", or "adjusted" (combine factor and / or grower's weight)
+    result.clean_zip        # the full clean shapefile, with OCED's extra columns
     result.summary          # a dict: what was read, the import settings, every step with its limits and counts
 
 The route is OCED's own, with OCED's engine (oced_clean/_engine, copied unchanged from the OCED repository):
@@ -15,10 +16,14 @@ The route is OCED's own, with OCED's engine (oced_clean/_engine, copied unchange
     4. import as SMS          engine.run.import_as_sms     the Processing Settings SMS gives this source
     5. SMS 3-sigma cleaning   engine.run.clean             clip, Optimize Swath Widths, moisture, speed, dry yield
     6. the clean shapefile    written by the engine        byte copy of the kept records, cells changed by step 2 only
+    7. the shapefile for DIFM engine.difm.write_zip        the same readings in the layout of an SMS shapefile export
+
+Two adjustments can follow the cleaning, both OCED's and both off unless asked for: the combine factor (several
+combines) and the level of the grower's weight. They decide which yield the shapefile for DIFM carries (difm_yield).
 
 clean_yield() below is the sequence of OCED's command line (engine.run._cli) without its options for other things
-(grower's weight, combine factor, planter and sprayer files). tests/test_parity.py runs both on the same synthetic
-inputs and compares the clean shapefiles byte for byte.
+(another cleaning method, planter and sprayer files). tests/test_parity.py runs both on the same synthetic inputs
+and compares the clean shapefiles byte for byte.
 """
 from __future__ import annotations
 
@@ -37,6 +42,10 @@ from ._engine.formats import detect as _detect
 _lean.install()
 
 GROUP_MODES = ("auto", "machine", "task", "field")
+DIFM_YIELDS = ("adjusted", "monitor")                    # the yield in the shapefile for DIFM
+FACTOR_METHODS = ("auto", "cells", "track", "point", "machine")     # how OCED computes the combine factor
+WEIGHT_UNITS = tuple(_run.TICKET_UNITS)                  # lb, kg, bu, t (metric tonne), bu/ac
+WEIGHT_BASES = ("wet", "dry")
 _LOG = logging.getLogger("oced_clean")
 
 
@@ -66,8 +75,9 @@ class CleanResult:
     summary_json: str
     engine_json: str          # the engine's full record of the run (every setting, limit, count, warning)
     out_dir: str              # the work folder of the run
-    difm_shp: str | None = None   # the shapefile for DIFM: the kept readings in the layout of an SMS shapefile export
-    difm_zip: str | None = None   # the same zipped: the yield upload of the DIFM pipeline
+    difm_zip: str | None = None   # the shapefile for DIFM, zipped: the kept readings in the layout of an SMS shapefile
+    #                               export; the yield upload of the DIFM pipeline
+    difm_yield: str | None = None  # the yield in it: "adjusted" (combine factor and / or grower's weight) or "monitor"
 
     def text(self) -> str:
         """The summary as a short plain-text report."""
@@ -141,6 +151,85 @@ def _read_boundary(boundary, feature):
     return plan
 
 
+def _number(value, name: str, low: float = 0.0, high: float | None = None) -> float:
+    """`value` as a number above `low` (and below `high`), else CleaningError naming the option."""
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        v = float("nan")
+    if not (v == v and v > low and (high is None or v < high)):
+        raise CleaningError(f"{name} must be a number above {low:g}" + (f" and below {high:g}" if high else "")
+                            + f", not {value!r}")
+    return v
+
+
+def _adjustments(grower_weight, weight_unit, weight_basis, weight_moisture, weight_area_ac, combine_factor,
+                 reference_combine, difm_yield) -> tuple:
+    """(the engine's scale_ticket setting or None, the engine's machines setting) from the options of clean_yield,
+    checked before any file is read. Both are the settings OCED's own command line builds from its --scale-ticket ...
+    and --factor-method / --reference-machine options."""
+    if difm_yield is not None and difm_yield not in DIFM_YIELDS:
+        raise CleaningError(f"difm_yield must be one of {', '.join(DIFM_YIELDS)} (or None), not {difm_yield!r}")
+    method = None
+    if combine_factor is True:
+        method = "auto"
+    elif isinstance(combine_factor, str) and combine_factor.strip().lower() in FACTOR_METHODS:
+        method = combine_factor.strip().lower()
+    elif combine_factor not in (None, False):
+        raise CleaningError(f"combine_factor must be True, False or one of {', '.join(FACTOR_METHODS)}, not "
+                            f"{combine_factor!r}")
+    if reference_combine and not method:
+        raise CleaningError("reference_combine names the reference of the combine factor: switch the factor on with "
+                            "combine_factor=True (or a method)")
+    machines = {"harmonise": False}                      # the SMS sequence alone: no combine factor
+    if method:
+        machines = {"harmonise": True, "method": method}
+        if reference_combine:
+            machines["reference"] = str(reference_combine)
+    ticket = None
+    if grower_weight is None:
+        if weight_moisture is not None or weight_area_ac is not None:
+            raise CleaningError("weight_moisture and weight_area_ac describe the grower's weight: give grower_weight too")
+    else:
+        if weight_unit not in WEIGHT_UNITS:
+            raise CleaningError(f"weight_unit must be one of {', '.join(WEIGHT_UNITS)}, not {weight_unit!r}")
+        if weight_basis not in WEIGHT_BASES:
+            raise CleaningError(f"weight_basis must be one of {', '.join(WEIGHT_BASES)}, not {weight_basis!r}")
+        if weight_moisture is not None and weight_basis == "dry":
+            raise CleaningError("weight_moisture only goes with weight_basis='wet': a dry-basis weight is already at "
+                                "the dry moisture")
+        if weight_area_ac is not None and weight_unit != "bu/ac":
+            raise CleaningError("weight_area_ac only goes with weight_unit='bu/ac' (the acres the grower's yield is "
+                                "over)")
+        ticket = {"value": _number(grower_weight, "grower_weight"), "unit": weight_unit, "basis": weight_basis,
+                  "moisture_pct": (None if weight_moisture is None else _number(weight_moisture, "weight_moisture",
+                                                                               high=100.0)),
+                  "note": None,
+                  "area_ac": None if weight_area_ac is None else _number(weight_area_ac, "weight_area_ac")}
+    if difm_yield == "adjusted" and ticket is None and not method:
+        raise CleaningError("difm_yield='adjusted' needs an adjustment: give the grower's weight (grower_weight) and / "
+                            "or switch the combine factor on (combine_factor)")
+    return ticket, machines
+
+
+def _write_difm(clean_shp: str, R: dict, source: dict | None, which: str, adjusted_column: str | None) -> dict:
+    """The shapefile for DIFM of the clean file, written by the engine (engine/difm.py write_zip) next to it:
+    <clean file>_DIFM.zip with the monitor's yield, <clean file>_adjusted_DIFM.zip with the adjusted one. Returns the
+    writer's own record ({zip, n, fields, days, notes, warnings ...}).
+
+    PROVISIONAL, written before OCED published the adjusted file: the monitor call is the writer's as it stood on
+    11 November 2026; how the adjusted file is asked for (the `adjusted` keyword below) is to be matched with the
+    engine when it is copied in. tests/test_difm_file.py fails until it does, which is the reminder."""
+    from ._engine import difm as _difm
+    kw = {"source": source, "columns": R.get("columns")}
+    if which == "adjusted":
+        kw.update(map_column=adjusted_column, adjusted=True)
+    W = _difm.write_zip(clean_shp, **kw)
+    if not (W.get("zip") and os.path.isfile(W["zip"])):
+        raise RuntimeError("the engine wrote no shapefile for DIFM")
+    return W
+
+
 def inspect_upload(inputs, work_dir, boundary=None, *, boundary_feature=None, log=None) -> dict:
     """What an upload holds, without cleaning anything: for a page that lets the user choose, or to check an upload.
 
@@ -177,8 +266,12 @@ def clean_yield(inputs, boundary, out_dir, *, boundary_feature=None, candidate: 
                 units: str | Iterable[str] | None = None, field: str | None = None, year: int | None = None,
                 allow_mixed: bool = False, product: str | None = None, weight_to_volume: float | None = None,
                 dry_moisture: float | None = None, min_yield: float | None = None, max_yield: float | None = None,
-                expand_dry_moisture: bool = False, group_by: str | None = None, tag: str | None = None,
-                cleanup: bool = False, log=None) -> CleanResult:
+                expand_dry_moisture: bool = False, group_by: str | None = None,
+                grower_weight: float | None = None, weight_unit: str = "lb", weight_basis: str = "wet",
+                weight_moisture: float | None = None, weight_area_ac: float | None = None,
+                combine_factor: bool | str = False, reference_combine: str | None = None,
+                difm_yield: str | None = None, tag: str | None = None, cleanup: bool = False,
+                log=None) -> CleanResult:
     """Raw yield-monitor data -> the clean shapefile, with OCED's rules.
 
     inputs      the uploaded file(s), folder(s) or zip(s): a Case IH / New Holland .cn1 card, a John Deere GreenStar 3
@@ -212,6 +305,27 @@ def clean_yield(inputs, boundary, out_dir, *, boundary_feature=None, candidate: 
     group_by    where the mean and SD of the moisture, speed and yield steps are computed: None or "auto" = one group
                 per combine over all its tasks and days (one group for the field when one combine cut it); "task" =
                 one group per task; "machine"; "field" = one group for everything.
+
+    Adjustments after the cleaning (none by default: the SMS 3-sigma sequence alone). The cleaning itself, the
+    readings kept and the monitor's columns are the same with or without them; they add a column to the full clean
+    file and decide which yield the shapefile for DIFM carries:
+    grower_weight     the weight the grower got for the field (the scale ticket), in weight_unit: the map is leveled
+                      to it (level factor = the weight / the monitor's total; column Yld_Level).
+    weight_unit       lb (default), kg, t (metric tonne), bu, or bu/ac (the grower's yield per acre).
+    weight_basis      "wet" (default: the scale weighed the grain as harvested) or "dry" (the weight is already at
+                      the dry moisture).
+    weight_moisture   %, the moisture of the weighed grain when the ticket gives it (wet basis only).
+    weight_area_ac    with bu/ac: the acres the grower's yield is over (default: the boundary's area).
+    combine_factor    several combines: True (or "auto") computes OCED's combine factor where the combines met on
+                      interleaved or mixed passes and applies it where it is proven (column Yld_Harm); "cells",
+                      "track", "point" or "machine" choose the method. False = no factor.
+    reference_combine the combine the others are brought to (default: the one with the most kept readings).
+    difm_yield        the yield in the shapefile for DIFM: "monitor" = the SMS 3-sigma sequence alone; "adjusted" =
+                      with the combine factor and the grower's weight; None = adjusted when the cleaning adjusted
+                      something, monitor otherwise. "adjusted" without grower_weight or combine_factor is an error;
+                      asked for but nothing was applied (a factor that is not proven), the file is the monitor one
+                      and the result says so (CleanResult.difm_yield, summary["difm_file"]).
+
     tag         name prefix of the output files (default: the field and year of a raw card, the file name otherwise).
     cleanup     True removes input/, decoded/ and sections/ from out_dir at the end (the unpacked upload can be large);
                 output/ stays.
@@ -223,6 +337,8 @@ def clean_yield(inputs, boundary, out_dir, *, boundary_feature=None, candidate: 
     emit = _logger(log)
     if group_by is not None and group_by not in GROUP_MODES:
         raise CleaningError(f"group_by must be one of {', '.join(GROUP_MODES)} (or None), not {group_by!r}")
+    ticket, machines = _adjustments(grower_weight, weight_unit, weight_basis, weight_moisture, weight_area_ac,
+                                    combine_factor, reference_combine, difm_yield)
     work = os.path.abspath(os.fspath(out_dir))
     for sub in ("input", "decoded", "output"):
         os.makedirs(os.path.join(work, sub), exist_ok=True)
@@ -310,7 +426,9 @@ def clean_yield(inputs, boundary, out_dir, *, boundary_feature=None, candidate: 
     if tag or dec:
         settings.setdefault("tag", tag or dec["tag"])
     settings["method"] = "sms3sigma"
-    settings.setdefault("machines", {}).setdefault("harmonise", False)     # the SMS sequence alone: no combine factor
+    settings["machines"] = machines                      # {"harmonise": False} unless combine_factor asks for it
+    if ticket is not None:
+        settings["scale_ticket"] = ticket
     if group_by:
         settings["sms3sigma"] = dict(settings.get("sms3sigma") or {}, group_by=group_by)
     # as OCED: the import's weight, moisture and minimum, and the SMS clip of the boundary
@@ -321,10 +439,15 @@ def clean_yield(inputs, boundary, out_dir, *, boundary_feature=None, candidate: 
     files = dict(R["files"])
     for key in ("report_pdf", "figures"):            # not made by this package (oced_clean/_lean.py)
         files.pop(key, None)
+    # the shapefile for DIFM: the adjusted yield when the cleaning adjusted something, unless the monitor's is asked
+    adjusted_column = _summary.adjusted_column(R)
+    which = "adjusted" if (adjusted_column and difm_yield != "monitor") else "monitor"
+    W = _write_difm(files["difm_ready_shp"], R, dec["source"] if dec else None, which, adjusted_column)
     S = _summary.build(R, files=files, dataset=_dataset_row(cands.index(cand) + 1, cand),
                        units=[_unit_row(u, shares.get(u.id)) for u in sel], unit_note=unit_note,
                        decode_report=dec["report"] if dec else None, import_record=imp_rec,
-                       boundary=os.fspath(boundary) if boundary else None, notes=list(cands.notes))
+                       boundary=os.fspath(boundary) if boundary else None, notes=list(cands.notes),
+                       difm=W, difm_yield=which, difm_yield_asked=difm_yield)
     sj = os.path.join(out, f"{R['tag']}_summary.json")
     with open(sj, "w", encoding="utf-8") as f:
         json.dump(S, f, indent=1)
@@ -335,11 +458,9 @@ def clean_yield(inputs, boundary, out_dir, *, boundary_feature=None, candidate: 
         S["files"]["intermediate_files_removed"] = True
         with open(sj, "w", encoding="utf-8") as f:
             json.dump(S, f, indent=1)
-    difm_shp, difm_zip = _summary.difm_files(files)
-    if difm_zip:
-        emit(f"shapefile for DIFM: {difm_zip}")
-    emit(f"clean file: {files['difm_ready_zip']} (map the yield to {S['result']['yield_column']})")
+    emit(f"shapefile for DIFM ({which} yield): {W['zip']}")
+    emit(f"full clean file: {files['difm_ready_zip']} (its yield to map: {S['result']['yield_column']})")
     return CleanResult(clean_shp=files["difm_ready_shp"], clean_zip=files["difm_ready_zip"],
                        flagged_shp=files["flagged_shp"], flagged_zip=files["flagged_zip"],
                        yield_column=S["result"]["yield_column"], summary=S, summary_json=sj,
-                       engine_json=files["json"], out_dir=work, difm_shp=difm_shp, difm_zip=difm_zip)
+                       engine_json=files["json"], out_dir=work, difm_zip=W["zip"], difm_yield=which)

@@ -50,6 +50,7 @@ ENGINE_FILES = [
     "engine/__init__.py",
     "engine/run.py",
     "engine/sms_import.py",
+    "engine/difm.py",                    # the writer of the shapefile for DIFM (new in OCED 0.3.0)
     "engine/clean/__init__.py",
     "engine/clean/yield_clean.py",
     "engine/clean/sms3sigma.py",
