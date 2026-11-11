@@ -1,0 +1,26 @@
+# oced-clean: code, tests on synthetic data and docs only. Grower data never goes here: no monitor cards, exports,
+# boundaries or results of real fields, and no figures measured on them.
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+# anything a local check on real data writes
+local/
+work/
+*.zip
+*.shp
+*.shx
+*.dbf
+*.prj
+*.cpg
+*.geojson
+*.kml
+*.kmz
+*.cn1
+*.jdl
+*.fdd
+*.fdl
