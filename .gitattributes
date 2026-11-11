@@ -1,0 +1,3 @@
+# LF in the repository and in every checkout: tools/sync_engine.py records the hash of each copied engine file,
+# and tests/test_engine_manifest.py compares the files on disk with it, byte for byte.
+* text=auto eol=lf
