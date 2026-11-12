@@ -36,13 +36,14 @@ from typing import Callable, Iterable
 
 from . import _lean
 from . import summary as _summary
+from ._engine import difm as _difm
 from ._engine import run as _run
 from ._engine.formats import detect as _detect
 
 _lean.install()
 
 GROUP_MODES = ("auto", "machine", "task", "field")
-DIFM_YIELDS = ("adjusted", "monitor")                    # the yield in the shapefile for DIFM
+DIFM_YIELDS = tuple(_difm.YIELDS)                        # the yield in the shapefile for DIFM: monitor, adjusted
 FACTOR_METHODS = ("auto", "cells", "track", "point", "machine")     # how OCED computes the combine factor
 WEIGHT_UNITS = tuple(_run.TICKET_UNITS)                  # lb, kg, bu, t (metric tonne), bu/ac
 WEIGHT_BASES = ("wet", "dry")
@@ -212,19 +213,22 @@ def _adjustments(grower_weight, weight_unit, weight_basis, weight_moisture, weig
     return ticket, machines
 
 
-def _write_difm(clean_shp: str, R: dict, source: dict | None, which: str, adjusted_column: str | None) -> dict:
-    """The shapefile for DIFM of the clean file, written by the engine (engine/difm.py write_zip) next to it:
-    <clean file>_DIFM.zip with the monitor's yield, <clean file>_adjusted_DIFM.zip with the adjusted one. Returns the
-    writer's own record ({zip, n, fields, days, notes, warnings ...}).
-
-    PROVISIONAL, written before OCED published the adjusted file: the monitor call is the writer's as it stood on
-    11 November 2026; how the adjusted file is asked for (the `adjusted` keyword below) is to be matched with the
-    engine when it is copied in. tests/test_difm_file.py fails until it does, which is the reminder."""
-    from ._engine import difm as _difm
-    kw = {"source": source, "columns": R.get("columns")}
-    if which == "adjusted":
-        kw.update(map_column=adjusted_column, adjusted=True)
-    W = _difm.write_zip(clean_shp, **kw)
+def _write_difm(clean_shp: str, R: dict, source: dict | None, imported: str | None, difm_yield: str | None) -> dict:
+    """The shapefile for DIFM of the clean file, written by the engine (engine/difm.py write_zip) next to it, as
+    OCED's app asks for it: <clean file>_DIFM.zip with the monitor's yield, <clean file>_adjusted_DIFM.zip with the
+    adjusted one. The adjusted file is written when the cleaning adjusted the yield (the engine's own rule,
+    difm.adjustment_of) unless difm_yield is "monitor". source = the decode record of a raw upload (the time basis
+    of its dates); imported = the file the import as SMS read (an Operations Center export: its metadata names the
+    field and the combines). Returns the writer's own record ({zip, yield, n, fields, adjustment, notes, warnings
+    ...})."""
+    try:
+        map_column = _run.recommended_yield_column(R)[0]
+    except Exception:                                    # only names the column in a warning of the writer
+        map_column = None
+    adjustment = _difm.adjustment_of(R, _difm.field_names(clean_shp))
+    adjusted = adjustment is not None and difm_yield != "monitor"
+    W = _difm.write_zip(clean_shp, source=source, columns=R.get("columns"), map_column=map_column,
+                        adjustment=adjustment, adjusted=adjusted, basis=_difm.import_basis(R, imported=imported))
     if not (W.get("zip") and os.path.isfile(W["zip"])):
         raise RuntimeError("the engine wrote no shapefile for DIFM")
     return W
@@ -440,9 +444,9 @@ def clean_yield(inputs, boundary, out_dir, *, boundary_feature=None, candidate: 
     for key in ("report_pdf", "figures"):            # not made by this package (oced_clean/_lean.py)
         files.pop(key, None)
     # the shapefile for DIFM: the adjusted yield when the cleaning adjusted something, unless the monitor's is asked
-    adjusted_column = _summary.adjusted_column(R)
-    which = "adjusted" if (adjusted_column and difm_yield != "monitor") else "monitor"
-    W = _write_difm(files["difm_ready_shp"], R, dec["source"] if dec else None, which, adjusted_column)
+    W = _write_difm(files["difm_ready_shp"], R, dec["source"] if dec else None,
+                    (imp_rec or {}).get("all_readings"), difm_yield)
+    which = "adjusted" if W.get("yield") == "adjusted" else "monitor"
     S = _summary.build(R, files=files, dataset=_dataset_row(cands.index(cand) + 1, cand),
                        units=[_unit_row(u, shares.get(u.id)) for u in sel], unit_note=unit_note,
                        decode_report=dec["report"] if dec else None, import_record=imp_rec,

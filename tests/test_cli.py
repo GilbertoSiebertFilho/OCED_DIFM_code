@@ -49,9 +49,9 @@ def test_quiet_json_says_nothing_else(field, tmp_path, capsys):
 
 
 def test_grower_weight_and_the_yield_for_difm(field, field_run, tmp_path, capsys):
-    """A made-up grower's yield 4 % above the monitor's average: the adjusted file by default, the monitor one asked
+    """A made-up grower's yield 10 % above the monitor's average: the adjusted file by default, the monitor one asked
     for."""
-    weight = ["--grower-weight", f"{1.04 * field_run.summary['result']['average_area_weighted']:.2f}",
+    weight = ["--grower-weight", f"{1.10 * field_run.summary['result']['average_area_weighted']:.2f}",
               "--weight-unit", "bu/ac", "--weight-basis", "dry"]
     base = ["clean", field["shp"], "--boundary", field["boundary"], "--quiet"]
     rc = cli.main([*base, "--out", str(tmp_path / "adjusted"), "--json", *weight])

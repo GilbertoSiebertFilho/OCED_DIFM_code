@@ -104,7 +104,7 @@ def test_combine_factor_and_grower_weight(combines, tmp_path, capsys):
     assert r.yield_column == "Yld_Level"
 
 
-@pytest.mark.parametrize("card", ["cn1_card", "jdl_card", "gs3"])
+@pytest.mark.parametrize("card", ["cn1_card", "jdl_card", "gs3", "isoxml_set"])
 def test_raw_cards(card, request, tmp_path, capsys):
     C = request.getfixturevalue(card)
     _same_as_oceds_command_line([C["root"]], C["boundary"], tmp_path)

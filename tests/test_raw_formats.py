@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """Raw monitor data, one synthetic upload per format: a Case IH / New Holland .cn1 card, John Deere Gen4 .jdl logs, a
-John Deere GreenStar 3 card and a John Deere Operations Center export by header section. Each goes through the whole
-route (detect, choose the units by the boundary, decode, import as SMS, clean) and the result follows the method."""
+John Deere GreenStar 3 card, ISOXML task data and a John Deere Operations Center export by header section. Each goes
+through the whole route (detect, choose the units by the boundary, decode, import as SMS, clean) and the result
+follows the method."""
 from __future__ import annotations
 
 import os
@@ -14,7 +15,7 @@ from oced_clean._engine.formats import common
 from tests import helpers
 from tests.conftest import quiet
 
-HAVE_AN_UPLOAD_HERE = {"cnh_cn1", "jd_jdl", "jd_gs3_rcd"}       # the engine's decoders this file sends an upload to
+HAVE_AN_UPLOAD_HERE = {"cnh_cn1", "jd_jdl", "jd_gs3_rcd", "isoxml"}     # the engine's decoders this file sends an upload to
 
 
 def test_every_decoder_of_the_engine_has_an_upload_here():
@@ -90,6 +91,26 @@ def test_john_deere_greenstar_3_card(gs3, tmp_path):
     S, clean = _check(r, "jd_gs3_rcd")
     assert list(clean.columns)[:len(common.STANDARD_NAMES)] == common.STANDARD_NAMES
     assert S["import"]["values_from"]["test_weight_lb_bu"] == "file"      # the card's own crop definition
+
+
+def test_isoxml_task_data(isoxml_set, tmp_path):
+    r = oced_clean.clean_yield([isoxml_set["root"]], isoxml_set["boundary"], str(tmp_path / "run"), log=quiet)
+    S, clean = _check(r, "isoxml")
+    assert list(clean.columns)[:len(common.STANDARD_NAMES)] == common.STANDARD_NAMES
+    assert len(S["input"]["units"]) == 1 and S["input"]["units"][0]["share_inside_boundary"] == 1.0
+    assert 0 < S["input"]["readings_decoded"] <= isoxml_set["records"]      # the records with the header in the crop
+    assert S["boundary"]["readings_outside"] > 0                              # the boundary stops before the passes do
+    assert S["import"]["values"]["max_yield"] == 10000.0 and S["import"]["values"]["min_yield"] == 5.0
+
+
+def test_isoxml_task_data_as_a_zip_gives_the_same_clean_file(isoxml_set, tmp_path):
+    a = oced_clean.clean_yield([isoxml_set["root"]], isoxml_set["boundary"], str(tmp_path / "folder"), log=quiet)
+    z = shutil.make_archive(str(tmp_path / "upload"), "zip", isoxml_set["root"])
+    b = oced_clean.clean_yield([z], isoxml_set["boundary"], str(tmp_path / "zip"), log=quiet)
+    for ext in (".shp", ".shx", ".dbf", ".prj"):
+        with open(os.path.splitext(a.clean_shp)[0] + ext, "rb") as fa, \
+                open(os.path.splitext(b.clean_shp)[0] + ext, "rb") as fb:
+            assert fa.read() == fb.read(), ext
 
 
 def test_operations_center_export_by_section(ops_sections, tmp_path):

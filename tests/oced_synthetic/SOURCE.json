@@ -1,0 +1,73 @@
+{
+ "commit": "86294533489ed27b59066deef47f968a6c7f3ca5",
+ "files": {
+  "gs3_card.py": {
+   "changes": [
+    "package name: 3 import line(s) 'engine' -> 'oced_clean._engine'"
+   ],
+   "sha256": "814a46097271ce58bb110688113893b74be06e911e0ac132008045362be77142",
+   "sha256_source": "a1c5e9a282ec9c554020b05d8b498f006e558b66cc34032e24066a1fa0d14e5e",
+   "source": "tests/test_jd_gs3_rcd.py"
+  },
+  "jd_jdl_write.py": {
+   "changes": [
+    "package name: 1 import line(s) 'engine' -> 'oced_clean._engine'",
+    "2 relative import(s) of engine/formats made absolute (oced_clean._engine.formats)",
+    "1 import(s) of engine/formats/jd_jdl_write.py taken from its copy here (tests.oced_synthetic.jd_jdl_write)"
+   ],
+   "sha256": "fff2ccbe234a35f5cb104a71d8e14cad2d5dd0b17412cf6fa6205756140bc17b",
+   "sha256_source": "ae13ae191c3b65198c40378e57945a4bb0d38b45649214dbabd21fb86cdb787f",
+   "source": "engine/formats/jd_jdl_write.py"
+  },
+  "ops_exports.py": {
+   "changes": [
+    "package name: 3 import line(s) 'engine' -> 'oced_clean._engine'"
+   ],
+   "sha256": "aa1c8eb3fd1efae002ec2253f2cecee9e867c5de0055205f3243b9b3807e70cb",
+   "sha256_source": "45e81b6285599c0871f1747d7f579315f13032051389c64bc13af9a160bcc2e7",
+   "source": "tests/test_inputs.py"
+  },
+  "synthetic.py": {
+   "changes": [
+    "package name: 1 import line(s) 'tests.' -> 'tests.oced_synthetic.'"
+   ],
+   "sha256": "a4a81e2124044c9d1265140c7a1ced41d3bcacf21822df6f497fe7ba4558c134",
+   "sha256_source": "8796f4d2b3713ed14be2415c456339df5fa9e44da24e66b11b4aa20c85dceedc",
+   "source": "tests/synthetic.py"
+  },
+  "synthetic_cn1.py": {
+   "changes": [
+    "package name: 1 import line(s) 'tests.' -> 'tests.oced_synthetic.'"
+   ],
+   "sha256": "664344ce5b69cc6e144820c252d14fcd963a17d32be4edab0dce6e60c2644391",
+   "sha256_source": "aef137752e14862b3843e9a4122060e9864c478424c10a60e2297ae1ef9d27bb",
+   "source": "tests/synthetic_cn1.py"
+  },
+  "synthetic_combines.py": {
+   "changes": [
+    "package name: 1 import line(s) 'tests.' -> 'tests.oced_synthetic.'"
+   ],
+   "sha256": "98d6104d1b4b22eba8ede60750e796e2bc9a8d8182354eb6bd685f75478c1819",
+   "sha256_source": "00d94feb3dcac92afd0b1c137478931bc2fbd64c75086d5b3767d0bef54169c9",
+   "source": "tests/synthetic_combines.py"
+  },
+  "synthetic_isoxml.py": {
+   "changes": [
+    "package name: 1 import line(s) 'tests.' -> 'tests.oced_synthetic.'"
+   ],
+   "sha256": "784ea35269e3172a0c7dff645d70d759ab1d70d49d95ea6f2b00d5fd5815bbf0",
+   "sha256_source": "b6467daa31fb4b6dd253273743814a3d0212a1397d641113d402e019a3d3e4f3",
+   "source": "tests/synthetic_isoxml.py"
+  },
+  "synthetic_jdl.py": {
+   "changes": [
+    "package name: 1 import line(s) 'engine' -> 'oced_clean._engine'",
+    "1 import(s) of engine/formats/jd_jdl_write.py taken from its copy here (tests.oced_synthetic.jd_jdl_write)"
+   ],
+   "sha256": "e36513e520a1534bf3262623805f805ed437685146fad4475764500e7d1ae2c7",
+   "sha256_source": "b481d5a5693b64b580436f34bdd5d56b202e1c85d7adc62686211f5a7b1fb922",
+   "source": "tests/synthetic_jdl.py"
+  }
+ },
+ "oced_version": "0.3.0"
+}

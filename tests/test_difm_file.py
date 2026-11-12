@@ -36,9 +36,24 @@ def jdl_run(jdl_card, tmp_path_factory):
                                   log=quiet)
 
 
+@pytest.fixture(scope="module")
+def iso_run(isoxml_set, tmp_path_factory):
+    return oced_clean.clean_yield([isoxml_set["root"]], isoxml_set["boundary"],
+                                  str(tmp_path_factory.mktemp("iso_difm")), log=quiet)
+
+
+@pytest.fixture(scope="module")
+def ops_run(ops_sections, tmp_path_factory):
+    """An Operations Center export: a point file under other column names, without several fields of the layout."""
+    return oced_clean.clean_yield([ops_sections["root"]], ops_sections["boundary"],
+                                  str(tmp_path_factory.mktemp("ops_difm")), log=quiet)
+
+
 def _grower_yield(field_run) -> dict:
-    """A made-up grower's weight for the synthetic field: 4 % above the monitor's own average, as a dry yield."""
-    return {"grower_weight": round(1.04 * field_run.summary["result"]["average_area_weighted"], 2),
+    """A made-up grower's weight for the synthetic field: a dry yield 10 % above the monitor's own average. (The
+    level factor is not 1.10: the grower's yield is taken over the boundary's area, the monitor's over the ground
+    harvested.)"""
+    return {"grower_weight": round(1.10 * field_run.summary["result"]["average_area_weighted"], 2),
             "weight_unit": "bu/ac", "weight_basis": "dry"}
 
 
@@ -64,10 +79,11 @@ def harmonised(combines, tmp_path_factory):
                                   log=quiet, combine_factor="machine")
 
 
-@pytest.fixture(params=["field_run", "combines_run", "cn1_run", "jdl_run", "leveled", "leveled_monitor", "harmonised"])
+@pytest.fixture(params=["field_run", "combines_run", "cn1_run", "jdl_run", "iso_run", "ops_run", "leveled",
+                        "leveled_monitor", "harmonised"])
 def run(request):
-    """One run per kind of upload (a point export, an export of two combines, a Case IH card, John Deere Gen4 logs)
-    and per adjustment (a grower's weight, a combine factor)."""
+    """One run per kind of upload (a point export, an export of two combines, a Case IH card, John Deere Gen4 logs,
+    ISOXML task data, an Operations Center export) and per adjustment (a grower's weight, a combine factor)."""
     return request.getfixturevalue(request.param)
 
 

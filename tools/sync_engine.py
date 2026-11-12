@@ -65,6 +65,7 @@ ENGINE_FILES = [
     "engine/formats/cnh_cn1.py",
     "engine/formats/jd_gs3_rcd.py",
     "engine/formats/jd_jdl.py",
+    "engine/formats/isoxml.py",
     "engine/formats/ops_sections.py",
     "engine/formats/kml_points.py",
 ]
@@ -77,6 +78,7 @@ TEST_FILES = {
     "tests/synthetic_cn1.py": "synthetic_cn1.py",
     "tests/synthetic_combines.py": "synthetic_combines.py",
     "tests/synthetic_jdl.py": "synthetic_jdl.py",
+    "tests/synthetic_isoxml.py": "synthetic_isoxml.py",
     "tests/test_jd_gs3_rcd.py": "gs3_card.py",
     "tests/test_inputs.py": "ops_exports.py",
     "engine/formats/jd_jdl_write.py": "jd_jdl_write.py",
@@ -114,6 +116,27 @@ def make_report(R, path, *args, **kwargs):
 '''
 
 
+APPLIED_REPORT_STUB = '''# -*- coding: utf-8 -*-
+"""Stand-in for OCED's engine/report/applied_report.py (the PDF report of a planter / sprayer cleaning), written by
+tools/sync_engine.py.
+
+This package cleans harvests only and builds no PDF report. The module is here because the engine's planter /
+sprayer cleaning, which is copied with the route but never run, imports it.
+"""
+
+
+def make_report(R, path, *args, **kwargs):
+    """No PDF report in this package (see the module docstring). Returns None and writes nothing."""
+    return None
+'''
+# the do-nothing modules written in place of OCED's engine/report: file name under report/ -> (text, what it is)
+REPORT_STUBS = {
+    "clean_report.py": (REPORT_STUB, "do-nothing make_report() in place of the PDF report"),
+    "applied_report.py": (APPLIED_REPORT_STUB, "do-nothing make_report() in place of the PDF report of a planter / "
+                                               "sprayer cleaning (never run here)"),
+}
+
+
 def sha256(b: bytes) -> str:
     return hashlib.sha256(b).hexdigest()
 
@@ -149,6 +172,19 @@ def transform(src_path: str, raw: bytes, tests: bool = False) -> tuple[bytes, li
             text, n = REL_IMPORT_RE.subn(lambda m: m.group(1) + PKG + ".formats" + m.group(2), text)
             if n:
                 applied.append(f"{n} relative import(s) of engine/formats made absolute ({PKG}.formats)")
+        # an engine module that is copied as test support only (a monitor-format writer) is imported from there
+        for src, name in TEST_FILES.items():
+            if not src.startswith("engine/"):
+                continue
+            mod = PKG + "." + src[len("engine/"):-3].replace("/", ".")
+            parent, leaf = mod.rsplit(".", 1)
+            here = TEST_PKG + "." + name[:-3]
+            text, n1 = re.subn(rf"^([ \t]*from[ \t]+){re.escape(mod)}([ \t]+import[ \t])",
+                               lambda m: m.group(1) + here + m.group(2), text, flags=re.M)
+            text, n2 = re.subn(rf"^([ \t]*from[ \t]+){re.escape(parent)}([ \t]+import[ \t]+{re.escape(leaf)}\b)",
+                               lambda m: m.group(1) + TEST_PKG + m.group(2), text, flags=re.M)
+            if n1 + n2:
+                applied.append(f"{n1 + n2} import(s) of {src} taken from its copy here ({here})")
     return text.encode("utf-8"), applied
 
 
@@ -259,7 +295,7 @@ def sync(oced: str, ref: str, expect_subject: str | None, expect_version: str | 
         files[rel] = {"source": src, "sha256_source": sha256(raw), "sha256": sha256(data), "changes": applied}
     # every engine module a copied module imports must be copied too (or be the report stub)
     have = {PKG + "." + r[:-3].replace("/", ".").removesuffix(".__init__") for r in vendored}
-    have |= {PKG, PKG + ".report", PKG + ".report.clean_report"}
+    have |= {PKG, PKG + ".report"} | {PKG + ".report." + name[:-3] for name in REPORT_STUBS}
     for rel, data in vendored.items():
         for mod in imported_engine_modules(data):
             if mod in have or not _is_module(mod, listed):
@@ -277,13 +313,14 @@ def sync(oced: str, ref: str, expect_subject: str | None, expect_version: str | 
                 os.remove(os.path.join(dp, f))
     for rel, data in vendored.items():
         write(os.path.join(DEST, *rel.split("/")), data)
-    stub = REPORT_STUB.encode("utf-8")
     write(os.path.join(DEST, "report", "__init__.py"), b"")
-    write(os.path.join(DEST, "report", "clean_report.py"), stub)
     files["report/__init__.py"] = {"source": None, "sha256_source": None, "sha256": sha256(b""),
-                                   "changes": ["not from OCED: empty package marker of the report stub"]}
-    files["report/clean_report.py"] = {"source": None, "sha256_source": None, "sha256": sha256(stub),
-                                       "changes": ["not from OCED: do-nothing make_report() in place of the PDF report"]}
+                                   "changes": ["not from OCED: empty package marker of the report stubs"]}
+    for name, (text, what) in REPORT_STUBS.items():
+        stub = text.encode("utf-8")
+        write(os.path.join(DEST, "report", name), stub)
+        files["report/" + name] = {"source": None, "sha256_source": None, "sha256": sha256(stub),
+                                   "changes": ["not from OCED: " + what]}
     manifest = {
         "what": "The cleaning engine of OCED (Olds College Extract Data), copied by tools/sync_engine.py. Do not edit "
                 "the files in this folder: change OCED and sync again.",
@@ -292,7 +329,8 @@ def sync(oced: str, ref: str, expect_subject: str | None, expect_version: str | 
         "package": PKG, "decoders": decoders,
         "patches": [{"file": p, "what": w} for p, w, _o, _n, _c in PATCHES]
         + [{"file": "*", "what": f"import lines of the top-level package 'engine' renamed to '{PKG}'"},
-           {"file": "report/clean_report.py", "what": "stub: no PDF report (OCED's engine/report is not copied)"}],
+           {"file": "report/clean_report.py, report/applied_report.py",
+            "what": "stubs: no PDF report (OCED's engine/report is not copied)"}],
         "not_copied": ["engine/report/* (PDF report)", "engine/works.py (the app's saved works)",
                        "engine/clean/references.py (literature citations of the report; optional in OCED)",
                        "engine/formats/*_write.py, native_write.py, isoxml_write.py (monitor-format writers)"],
@@ -308,6 +346,9 @@ def sync(oced: str, ref: str, expect_subject: str | None, expect_version: str | 
         raw = git(oced, "show", f"{commit}:{src}")
         data, applied = transform(src, raw, tests=True)
         bad = check_imports(name, data)
+        # a generator may import the copied engine, never an engine module that is not copied
+        bad += [f"{name}: imports {mod}, which is not copied into the package" for mod in imported_engine_modules(data)
+                if mod not in have and _is_module(mod, listed)]
         if bad:
             raise SystemExit("test support not synced:\n  " + "\n  ".join(bad))
         write(os.path.join(TEST_DEST, name), data)
@@ -317,7 +358,7 @@ def sync(oced: str, ref: str, expect_subject: str | None, expect_version: str | 
     with open(TEST_MANIFEST, "w", encoding="utf-8", newline="\n") as f:
         json.dump({"commit": commit, "oced_version": version, "files": tfiles}, f, indent=1, sort_keys=True)
         f.write("\n")
-    print(f"synced OCED {version or '?'} ({commit[:12]} {subject!r}): {len(vendored)} engine files + the report stub "
+    print(f"synced OCED {version or '?'} ({commit[:12]} {subject!r}): {len(vendored)} engine files + the report stubs "
           f"-> {os.path.relpath(DEST, ROOT)}; {len(tfiles)} test-support files -> {os.path.relpath(TEST_DEST, ROOT)}")
     if new_decoders:
         print(f"NEW decoder(s) in OCED, copied: {', '.join(new_decoders)}. Still to do by hand: a synthetic upload of "

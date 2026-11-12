@@ -9,7 +9,8 @@ import pytest
 
 import oced_clean
 from tests import helpers
-from tests.oced_synthetic import gs3_card, ops_exports, synthetic, synthetic_cn1, synthetic_combines, synthetic_jdl
+from tests.oced_synthetic import (gs3_card, ops_exports, synthetic, synthetic_cn1, synthetic_combines,
+                                  synthetic_isoxml, synthetic_jdl)
 
 
 _JDL_TRACK = synthetic_jdl.track
@@ -91,6 +92,20 @@ def gs3(tmp_path_factory):
     C = gs3_card.make_card(os.path.join(d, "upload"), n=400)
     C["boundary"] = _box(d, C["lon0"], C["lat0"])
     return C
+
+
+@pytest.fixture(scope="session")
+def isoxml_set(tmp_path_factory):
+    """ISOXML task data of a harvest (a TASKDATA folder: TASKDATA.XML and its time log) and a boundary that stops
+    before the east end of the passes."""
+    d = str(tmp_path_factory.mktemp("isoxml"))
+    R = synthetic_isoxml.harvest(n_pass=ISOXML_PASSES, n=ISOXML_RECORDS)
+    S = synthetic_isoxml.write_set(os.path.join(d, "upload", "TASKDATA"), R)
+    return {"root": os.path.join(d, "upload"), "folder": S["folder"], "records": len(R["t"]),
+            "boundary": synthetic_isoxml.boundary(os.path.join(d, "boundary"), n_pass=ISOXML_PASSES, n=ISOXML_RECORDS)}
+
+
+ISOXML_PASSES, ISOXML_RECORDS = 6, 60       # passes, and one-second records in each
 
 
 @pytest.fixture(scope="session")

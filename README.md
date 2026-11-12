@@ -8,7 +8,7 @@ in the layout of an Ag Leader SMS shapefile export (the same columns, in the sam
 types), and a cleaning summary. That shapefile goes where the SMS export goes today.
 
 ```
-raw upload (.cn1 card, GreenStar 3 card, JD-Data .jdl logs, Operations Center export)  +  boundary
+raw upload (.cn1 card, GreenStar 3 card, JD-Data .jdl logs, ISOXML task data, Operations Center export)  +  boundary
         |
         v
    oced-clean        import as SMS  ->  clip  ->  Optimize Swath Widths  ->  moisture  ->  speed  ->  dry yield
@@ -28,21 +28,20 @@ comes from.
 
 ## Status
 
-11 November 2026: first version, put here for review. **The package does not run from this repository yet.**
+12 November 2026. The package runs from this repository: it carries the engine of OCED 0.3.0
+(`oced-clean version` prints the commit).
 
 | Part | State |
 |---|---|
 | The library, the command line and the summary (`src/oced_clean/`) | written |
-| The tests, on synthetic data (`tests/`) | written |
-| The tools that copy the engine and compare the result with OCED (`tools/`) | written |
-| The cleaning engine (`src/oced_clean/_engine/`) | **not in the repository yet** |
-| OCED's synthetic-data generators the tests use (`tests/oced_synthetic/`) | **not in the repository yet** |
-| The shapefile for DIFM, in the SMS shapefile export layout | **comes with the engine**; its layout and the test of it are here |
-| The choice of the yield in it: the monitor's, or adjusted with the combine factor and the grower's weight | written (`difm_yield`); the engine's writer of the adjusted file **comes with the engine** |
-| ISOXML task data (`TASKDATA.XML`) of a harvest as a fifth source | **comes with the engine**: OCED 0.3.0 adds a reader for it. The text below still says ISOXML is not read, and is changed when the engine is in |
-
-The engine and the generators are copied from OCED version 0.3.0 by `tools/sync_engine.py`. That version is being
-published; the copy is added here as soon as it is public.
+| The cleaning engine (`src/oced_clean/_engine/`) and OCED's synthetic-data generators (`tests/oced_synthetic/`) | copied from OCED 0.3.0 by `tools/sync_engine.py` |
+| Sources read | a `.cn1` card, a GreenStar 3 card, Gen4 `.jdl` logs, ISOXML task data, an Operations Center export, a yield point shapefile |
+| The shapefile for DIFM, in the SMS shapefile export layout, with the monitor's yield or the adjusted one | written by the engine, handed out as `result.difm_zip` |
+| The tests, on synthetic data (`tests/`) | 114, all pass on the developer's computer (Windows 11, Python 3.14) |
+| Install into a clean environment (`pip install .` with the versions of `constraints-tested.txt`) | done on the same computer: only the listed dependencies come in, `oced-clean version` answers, and 113 of the 114 tests pass against the installed package (the other one checks the copy inside a checkout of this repository, and passes there) |
+| The byte-for-byte comparison with OCED 0.3.0 on real raw data (`tools/check_equivalence.py`) | running on the developer's computer at the time of this commit; the result is added here when it has finished |
+| An upload of this package's shapefile for DIFM to the platform | not done yet |
+| Linux, and Python 3.10 to 3.13 | not run: see [Limits](#limits) |
 
 Changed on 11 November 2026, after a first upload to the platform: the file handed to DIFM is no longer OCED's full
 clean file. The platform takes that file at upload, but its Define Features page does not get through it (it has
@@ -50,26 +49,8 @@ columns an SMS export does not have, and its time column is text). The same read
 SMS shapefile export go through. OCED 0.3.0 writes that file, and this package hands it out as `result.difm_zip`;
 see [The shapefile for DIFM](#the-shapefile-for-difm). The full clean file is still written, for checking.
 
-Done so far, on the developer's computer, with the 0.3.0 engine before its publication:
-
-- the route ran from the upload to the clean shapefile on synthetic uploads of all four sources (a `.cn1` card, a
-  GreenStar 3 card, Gen4 `.jdl` logs, an Operations Center export);
-- of the 103 tests, 86 passed. Among them: the comparison of this package with the engine's own command line, byte
-  for byte, for every source and with a grower's weight and a combine factor; and the shapefile for DIFM with the
-  monitor's yield (its layout, its name, its readings against the full clean file) for a point export, two
-  combines, a `.cn1` card and Gen4 logs;
-- 13 fail, all at one place: the adjusted file. The engine used here does not write it yet, and the call this
-  package makes for it is the provisional one named below;
-- 4 check the copied engine itself (its manifest, and that a run loads no plotting library) and can only run once
-  the copy is in.
-
-Still to do once the engine is in: the full test run, an install into a clean environment, the byte-for-byte
-comparison with OCED on real raw data, an upload of the shapefile for DIFM to the platform, and a run on Linux
-(see [Limits](#limits)).
-
-Until then, read this document as the description of what the package does and how it is called. One call in the
-code is provisional and marked so: how the engine is asked for the adjusted file (`_write_difm` in
-`src/oced_clean/api.py`), written before that part of OCED was published.
+Added on 12 November 2026: the choice between the monitor's yield and the adjusted one in that file
+([Adjustments](#3-adjustments-after-the-cleaning-on-request)), and ISOXML task data as a source.
 
 ## Contents
 
@@ -88,8 +69,6 @@ code is provisional and marked so: how the engine is asked for the adjusted file
 12. [Layout of the repository](#layout-of-the-repository)
 
 ## Install
-
-(Possible once the engine is in the repository: see [Status](#status).)
 
 Python 3.10 or newer, in its own virtual environment:
 
@@ -180,14 +159,16 @@ One or more files, folders or zips. A zip may hold folders and other zips. The p
 | Case IH / New Holland (displays that write a `.cn1` card, such as the AFS Pro 700) | the card folder that ends in `.cn1`, or a zip of it | `cnh_cn1` |
 | John Deere GreenStar 3 | the card (`RCD/EIC/...` with `.fdd` and `.fdl` files), or a zip of it | `jd_gs3_rcd` |
 | John Deere Gen4 / G5 | the `JD-Data` folder with its `.jdl` logs, or a zip of it; several combines together is fine | `jd_jdl` |
+| ISOXML task data (ISO 11783-10, any maker's display) | the `TASKDATA` folder (`TASKDATA.XML` with its `TLG*.XML` and `TLG*.BIN` time logs), or a zip of it; several sets together, and a zip of zipped sets as a telematics portal hands them out, are fine | `isoxml` |
 | John Deere Operations Center | the harvest shapefile export (with its `-Deere-Metadata.json`); both the per-second export and the export with one point per header section | `point_export`, `jd_ops_center_sections` |
 | A yield point shapefile | columns named as in an SMS export or an Operations Center export | `point_export` |
 
-Not read: ISOXML task data (`TASKDATA.XML`), and any other monitor format. The error message says so when the upload
-holds one. Yield points in a KML or KMZ file are converted and read as a point export.
+ISOXML task data is read for its harvest logs only: a time log that holds a yield value. Task data of a planter or
+a sprayer is not a harvest, and the message says so. No other monitor format is read. Yield points in a KML or KMZ
+file are converted and read as a point export.
 
 A raw card usually holds many fields and seasons. The package reads it in **units**: one task (Case IH), or one
-combine and field and season (John Deere). The boundary chooses the units: every unit of the latest season with
+combine and field and season (John Deere, ISOXML). The boundary chooses the units: every unit of the latest season with
 20 % or more of its readings inside the boundary (plus 50 m) is read. To choose by hand, use `units`, `field` or
 `year`; `oced-clean inspect` lists the units of an upload.
 
@@ -217,7 +198,7 @@ roads, yards and neighbouring fields then enter the means the filters are built 
 Ag Leader SMS applies "Processing Settings" when it reads a harvest. The package applies the same ones, with the
 values SMS itself uses for each source, so the data that is cleaned is the data SMS would hold.
 
-| Setting | John Deere (GreenStar 3, Gen4, Operations Center) | Case IH / New Holland and other point files |
+| Setting | John Deere (GreenStar 3, Gen4, Operations Center) and ISOXML task data | Case IH / New Holland and other point files |
 |---|---|---|
 | Weight to volume (lb/bu) and dry moisture (%) | from the crop of the file | SMS's product table (below) |
 | Minimum yield volume | 5 bu/ac | the product's (5 bu/ac for cereals, 10 for canola and flax) |
@@ -367,8 +348,20 @@ in this order:
   clean file (`Yld_Harm` or `Yld_Level`), and the other three are multiplied by the same factor, reading by reading.
   In the monitor file they are the monitor's values as cleaned. Every other column is the same in both.
 - Coordinates are WGS 84, and the `.prj` is the ESRI definition `GCS_WGS_1984`.
-- `Time` and `Date` are true DBF date fields (type `D`, eight characters, `YYYYMMDD`), not text.
-- The zip holds `.shp`, `.shx`, `.dbf`, `.prj` and `.cpg`, named as the zip, with nothing else and no folder.
+- Numbers are written with 6 decimals (DBF `N` 24 wide), text in 80 characters.
+- `Time` and `Date` are true DBF date fields (type `D`, eight characters, `YYYYMMDD`), not text. They hold the
+  calendar day of each reading. A time logged in UTC (John Deere logs) is dated in the clock time of the computer
+  that runs the package, as SMS dates it on the computer it runs on: **set the server's time zone to the field's**
+  (the `TZ` environment variable on Linux), or readings of the evening get the next day's date. Other sources are
+  dated by their own clock.
+- A column the upload does not have (an Operations Center export has no `Field`, `Dataset`, `Product`,
+  `Duration_s`, `Yld_Vol_We` or `Yld_Mass_D`) is filled only with what follows exactly from the file and its import:
+  mass and volume from each other through the bushel weight of the import, the duration from the time step of the
+  readings, the field and the crop from the export's metadata, `Dataset` = the combine of the reading. What does
+  not follow stays empty, and `summary["difm_file"]` says so in `notes` and `warnings`. An empty elevation (task
+  data whose display logs none) stays empty.
+- The zip holds `.shp`, `.shx`, `.dbf`, `.prj` and `.cpg`, named as the zip, with nothing else and no folder. The
+  same clean file gives the same zip, byte for byte. A zip over 10 MB is reported as a warning.
 - No other column is in it. What OCED adds (the combine id, the day, the session, the swath width as logged, the
   adjusted yields beside the monitor's) is in the full clean file and in the summary.
 
@@ -468,8 +461,8 @@ The keys of the summary:
 | `cleaning.steps[]` | one row per step and group, in the order they ran: `step`, `name`, `group`, `attribute`, `unit`, `readings_before`, `mean`, `sd`, `lower`, `upper`, `removed`, `remaining`, and for S3 to S5 `sd_after`, `sd_drop_pct`, `no_value` |
 | `cleaning.combines[]` | per combine: `readings`, `kept`, `days`, `mean_dry_yield` |
 | `result` | `yield_column`, `readings`, `area_ac`, `mean`, `average_area_weighted` (total / area, the "Avg. Yield" of an SMS summary), `median`, `sd`, `min`, `max`, `coordinate_system`, `added_columns`, `swath_changes` |
-| `adjustment` | what was done after the cleaning. `combine_factor` (`null` when not asked for): `method_asked`, `method_used`, `reference`, `factors` (per combine; 1 = none), `applied`, `decision` (the engine's sentence per combine). `grower_weight` (`null` when none was given): the weight as given, `weight_lb`, `weight_bu`, `bushel_lb`, `monitor_total_bu`, `level_factor`, `level_factor_after_combine_factor`. `column`: the adjusted yield of the full clean file, `null` when nothing was applied |
-| `difm_file` | the shapefile for DIFM: `zip` (its name), `yield` (`adjusted` or `monitor`), `yield_asked`, `yield_column_of_the_clean_file`, `layout`, `readings`, `fields`, `date_from`, `readings_without_date`, and the writer's `notes` and `warnings` |
+| `adjustment` | what was done after the cleaning. `combine_factor` (`null` when not asked for): `method_asked`, `method_used`, `reference`, `factors` (per combine; 1 = none), `applied`, `decision` (the engine's sentence per combine). `grower_weight` (`null` when none was given): the weight as given, `weight_lb`, `weight_bu`, `bushel_lb`, `monitor_total_bu`, `level_factor`, `level_factor_after_combine_factor`. `column`: the adjusted yield of the full clean file, and `what`: the engine's description of it as a product; both `null` when nothing was applied |
+| `difm_file` | the shapefile for DIFM: `zip` (its name), `zip_bytes`, `yield` (`adjusted` or `monitor`), `yield_asked`, `label` and `line` (the engine's words for which yield it is), `yield_column_of_the_clean_file`, `readings_adjusted`, `factor` (min, max, mean of the per-reading factor), `layout`, `readings`, `fields`, `filled_from_the_import`, `date_from`, `readings_without_date`, `readings_without_yield`, and the writer's `notes` and `warnings` |
 | `columns` | which column of the full clean file holds what, with its unit: `yield_volume_dry` (the monitor's), `yield_volume_dry_adjusted` (only when something was adjusted), `yield_mass_dry`, `yield_volume_wet`, `yield_mass_wet`, `moisture`, `swath_width`, `distance`, `speed`, `heading`, `duration`, `time`, `elevation`, `harvester_id`, `dataset`. The shapefile for DIFM needs no such list: its columns are always the eighteen above |
 | `files` | the paths of the shapefile for DIFM (`difm_zip`), of the full clean and flagged files and of the engine's record |
 | `warnings`, `checks`, `notes` | what the engine wants a person to read. `warnings` matter: a combine whose points sit beside its strip, readings with no moisture value, a crop the table does not know |
@@ -519,10 +512,14 @@ Notes for the integration:
 - **Monitor or adjusted yield.** The mapping above is the same for both files: the adjusted yield is in the same
   columns. When the platform has the grower's weight of the field, pass it as `grower_weight`; with several
   combines, `combine_factor=True`. Keep `result.difm_yield` with the job, so a report can say which yield it used.
-- **Harvester id.** The SMS export layout has no column for the combine, so the shapefile for DIFM has none. The
-  combine of every reading is in `Machine` of the full clean file (its serial number, for a raw upload), and
+- **Harvester id.** The SMS export layout has no column for the combine, so the shapefile for DIFM has none. Its
+  `Dataset` column is the task or log of the reading, which names one combine, but not as an id (for an Operations
+  Center export it is the combine itself). The combine of every reading is in `Machine` of the full clean file (its
+  serial number, for a raw upload), in the same order as the shapefile for DIFM, and
   `summary["cleaning"]["combines"]` lists the combines with their counts and means. A later step that works per
   combine needs one of the two.
+- **Time zone.** Set the server's time zone to the field's before running the package (see the dates of
+  [The shapefile for DIFM](#the-shapefile-for-difm)).
 - **The crop.** For John Deere data the crop comes from the file. For a Case IH / New Holland card the crop name on
   the card is matched to SMS's product table. When the platform knows the crop of the trial, pass it as `product`;
   it then decides the bushel weight and dry moisture. Mind that these two values change the dry yield: the same
@@ -608,7 +605,7 @@ bug or a broken file.
 
 | Situation | What happens |
 |---|---|
-| Nothing recognised in the upload (or ISOXML only) | `CleaningError`; the message lists what is read |
+| Nothing recognised in the upload (or task data without a harvest log) | `CleaningError`; the message lists what is read |
 | The upload holds several datasets, none chosen | `SeveralDatasetsError` with `.datasets` |
 | A planter or sprayer file | `CleaningError`: not a harvest file |
 | No unit of the card has 20 % of its readings in the boundary | `CleaningError`, with the distance to the nearest unit |
@@ -631,9 +628,10 @@ Read these before relying on the package.
   It has not been run on Linux and not on Python 3.10 to 3.13. The code uses no syntax newer than Python 3.9 and
   no call known to be Windows-only, but file names on a monitor card are a known risk on a file system that tells upper from
   lower case. Run the test suite on the server; it holds a card written in capitals for this reason.
-- **Formats.** Only the four sources in [Inputs](#inputs). ISOXML is not read. Each decoder reads the monitor
-  generations OCED has met; a newer display software can change a file layout, and the decoder then either refuses
-  the card or warns in the summary.
+- **Formats.** Only the sources in [Inputs](#inputs). Each decoder reads the monitor generations OCED has met; a
+  newer display software can change a file layout, and the decoder then either refuses the card or warns in the
+  summary. The ISOXML reader follows the standard's own references and not a maker's names, but its rules were
+  compared with Ag Leader SMS on the task data of one display model only.
 - **Same as OCED, by construction.** The package is not a second implementation: it runs OCED's engine, so it
   shares every limit of OCED. Two checks hold it to OCED's own result: the test suite on synthetic data, and
   `tools/check_equivalence.py` on real raw data ([Status](#status) says which have run).
@@ -656,8 +654,10 @@ Read these before relying on the package.
 - **Options that are not established against SMS** are not exposed: moving a combine's points sideways before the
   swath step, and running the swath step per combine. The engine reports a combine whose points sit a foot or more
   beside the strip it cut as a warning in the summary; read it.
-- **Time zone.** John Deere logs carry UTC. `Harv_Day` and `Session` are made from the local day estimated from the
-  longitude. They do not affect which readings are kept unless `group_by="task"`.
+- **Time zone.** John Deere logs carry UTC. `Harv_Day` and `Session` of the full clean file are made from the local
+  day estimated from the longitude. They do not affect which readings are kept unless `group_by="task"`. The dates
+  of the shapefile for DIFM follow another rule, the computer's clock (see
+  [The shapefile for DIFM](#the-shapefile-for-difm)), so near midnight the two can differ by a day.
 
 ## Tests
 
@@ -673,7 +673,7 @@ repository, and none may be added.
 | `tests/test_route.py` | the files written, the summary, the clip against the geometry, the import's minimum, the columns |
 | `tests/test_difm_file.py` | the shapefile for DIFM: the eighteen columns in order, their DBF types read from the file header, the two date fields, the `.prj`, the zip and its name, and that it holds the readings and values of the full clean file. The adjusted file: `Yld_Vol_Dr` is the adjusted column, the three other yield columns carry the same factor reading by reading, and every other field is byte for byte the monitor file's. The monitor file of a run with a grower's weight: the same records as the file of a run without one |
 | `tests/test_rules.py` | the rules, against a second statement of them written in `tests/helpers.py`: order, mean ± 3 SD recomputed before every step, the 25 % rule, one unit per combine, per task, per field |
-| `tests/test_raw_formats.py` | one synthetic upload per format through the whole route: `.cn1` card (also in capitals, also zipped), Gen4 `.jdl` logs, GreenStar 3 card, Operations Center export by section |
+| `tests/test_raw_formats.py` | one synthetic upload per format through the whole route: `.cn1` card (also in capitals, also zipped), Gen4 `.jdl` logs, GreenStar 3 card, ISOXML task data (also zipped), Operations Center export by section |
 | `tests/test_parity.py` | `clean_yield` against the engine's own command line: the clean and flagged shapefiles byte for byte, for every format, and with a grower's weight and a combine factor |
 | `tests/test_errors.py` | every refusal in the table above |
 | `tests/test_cli.py` | the command line, `--json`, the exit codes |
@@ -709,17 +709,20 @@ python tools/check_equivalence.py --oced ../OCED --cases local/cases.json --work
 ```
 
 The sync reads the files from the commit itself, applies the three changes listed at the top of
-`tools/sync_engine.py` (the package name in the import lines, a lazy import of scikit-image, a stub in place of the
-PDF report) and writes `src/oced_clean/_engine/ENGINE_SOURCE.json` with the commit and the hash of every file. It
-stops with a message if OCED changed in a place one of those changes touches, or if a copied module starts to import
-a module that is not copied. `python tools/sync_engine.py --check` verifies that nobody edited the copy.
+`tools/sync_engine.py` (the package name in the import lines, a lazy import of scikit-image, do-nothing modules in
+place of the two PDF reports) and writes `src/oced_clean/_engine/ENGINE_SOURCE.json` with the commit and the hash of
+every file. It stops with a message if OCED changed in a place one of those changes touches, or if a copied module
+or a copied test generator starts to import a module that is not copied. `python tools/sync_engine.py --check`
+verifies that nobody edited the copy.
 
 A format OCED gains comes in by itself: the sync copies every decoder the engine's own list names, and says so. Two
 things are then left to do by hand, and a test fails until the first is done: a synthetic upload of the new format
 in `tests/test_raw_formats.py`, and the format in [Inputs](#inputs).
 
 After a sync, read the diff of `_engine/run.py` around `_cli`: `oced_clean/api.py` follows that function step by
-step, and `tests/test_parity.py` fails if the two drift apart.
+step, and `tests/test_parity.py` fails if the two drift apart. The shapefile for DIFM is the one part OCED's command
+line does not write: `_write_difm` in `api.py` calls the engine's writer as OCED's app does (`write_difm` in OCED's
+`app/oced.py`), so read that function's diff too.
 
 ## Layout of the repository
 

@@ -1,0 +1,222 @@
+{
+ "commit": "86294533489ed27b59066deef47f968a6c7f3ca5",
+ "commit_date": "2026-11-12T01:22:23-06:00",
+ "commit_subject": "OCED 0.3.0: validated against SMS, ISOXML read, shapefile for DIFM, clean file in the monitor's format",
+ "decoders": [
+  "cnh_cn1",
+  "jd_jdl",
+  "jd_gs3_rcd",
+  "isoxml"
+ ],
+ "files": {
+  "__init__.py": {
+   "changes": [],
+   "sha256": "c7a2d3a09ca11b1171e986f477f8afb9fe63e14a6168313fc130af1ae1329ec9",
+   "sha256_source": "c7a2d3a09ca11b1171e986f477f8afb9fe63e14a6168313fc130af1ae1329ec9",
+   "source": "engine/__init__.py"
+  },
+  "clean/__init__.py": {
+   "changes": [],
+   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "sha256_source": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "source": "engine/clean/__init__.py"
+  },
+  "clean/aoi.py": {
+   "changes": [
+    "package name: 1 import line(s) 'engine' -> 'oced_clean._engine'"
+   ],
+   "sha256": "b8fb523f622b2a84d35a6d37e1bc0dac739597f2a51977056a8c9a88ceca4a75",
+   "sha256_source": "b48a60150a24e51c05d0aaafec86751a7dfbc32e0b11207d296231e24196b65c",
+   "source": "engine/clean/aoi.py"
+  },
+  "clean/applied3s.py": {
+   "changes": [
+    "package name: 7 import line(s) 'engine' -> 'oced_clean._engine'"
+   ],
+   "sha256": "aec1ba159deaf78b2d79883c9a5eb47f5a2bb73a79bddbcec4933c499065fe25",
+   "sha256_source": "4eea55e05cdb053bcc2dd2ecac879d0306889ff57abf0cc09e82a612caf8ff3e",
+   "source": "engine/clean/applied3s.py"
+  },
+  "clean/machines.py": {
+   "changes": [
+    "package name: 1 import line(s) 'engine' -> 'oced_clean._engine'"
+   ],
+   "sha256": "190ea445c4bd490ca7690491baba4e3fddbdd42c5a9de325ae8743d72569c8d5",
+   "sha256_source": "dc00ffea0232b0d60fb8265e8c51a9ffd37d89859bb2b8774822ef23dd0c777e",
+   "source": "engine/clean/machines.py"
+  },
+  "clean/sessions.py": {
+   "changes": [
+    "package name: 2 import line(s) 'engine' -> 'oced_clean._engine'"
+   ],
+   "sha256": "b9e4922d4af5844add19a4c33b9f291ed6b5ccbd7c63aed92cdcc95e69e05242",
+   "sha256_source": "1980e1195260b8c5fec9184a0d3923fa136aad1f48debffab014b118d418bf32",
+   "source": "engine/clean/sessions.py"
+  },
+  "clean/sms3sigma.py": {
+   "changes": [
+    "package name: 2 import line(s) 'engine' -> 'oced_clean._engine'"
+   ],
+   "sha256": "c6d3766f31c96f83840a9a24c58840798c531f383cafab3ae5b68ea422bc8b65",
+   "sha256_source": "a9eea00532fe63e624094861f131c89a21a0cca7a27fc3fd9f5687e5b5e30867",
+   "source": "engine/clean/sms3sigma.py"
+  },
+  "clean/sms_swath.py": {
+   "changes": [],
+   "sha256": "7b15d0931510f44d9019814e54cd5789145e4edd06ea6a572fb913035395cb08",
+   "sha256_source": "7b15d0931510f44d9019814e54cd5789145e4edd06ea6a572fb913035395cb08",
+   "source": "engine/clean/sms_swath.py"
+  },
+  "clean/yield_clean.py": {
+   "changes": [
+    "scikit-image imported only when the overlap raster of OCED's other cleaning method runs (never here)",
+    "package name: 8 import line(s) 'engine' -> 'oced_clean._engine'"
+   ],
+   "sha256": "4c7a58beb1e127e15118a05c79f73242d05d587cf0d74340f0d095f412585207",
+   "sha256_source": "e196c5d9ec60767bbbaf77acc5a3ca4d1afad32271147cd96057dd8455088d2d",
+   "source": "engine/clean/yield_clean.py"
+  },
+  "difm.py": {
+   "changes": [
+    "package name: 14 import line(s) 'engine' -> 'oced_clean._engine'"
+   ],
+   "sha256": "3de0ba1740f97c7b28b7ea8dd5fd6add39aad05c33685fbb72035bb97a240c6f",
+   "sha256_source": "9d19b6c6066a12e74c92460e2bffb3032dd3f328d6302ba13a9ab5ea37b7d21f",
+   "source": "engine/difm.py"
+  },
+  "formats/__init__.py": {
+   "changes": [],
+   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "sha256_source": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "source": "engine/formats/__init__.py"
+  },
+  "formats/cnh_cn1.py": {
+   "changes": [
+    "package name: 1 import line(s) 'engine' -> 'oced_clean._engine'"
+   ],
+   "sha256": "9739d4997269107d750f1d06886fc9e877f5faac6aac9a5d6d89a1dc41171b70",
+   "sha256_source": "f1097e86d19a062b88151a365cb18945c4d2c26d0de8c458a5fd5026269cd81f",
+   "source": "engine/formats/cnh_cn1.py"
+  },
+  "formats/common.py": {
+   "changes": [],
+   "sha256": "c6dd4b8e7f59b37414c9f5cef24e1f22507279e0a6e01d976055644f1fc2f073",
+   "sha256_source": "c6dd4b8e7f59b37414c9f5cef24e1f22507279e0a6e01d976055644f1fc2f073",
+   "source": "engine/formats/common.py"
+  },
+  "formats/detect.py": {
+   "changes": [
+    "module name built as a string for importlib: the engine's package name inside this package",
+    "package name: 5 import line(s) 'engine' -> 'oced_clean._engine'"
+   ],
+   "sha256": "98dc397cc7f92b7e17f0a98cdb9a8e49ba4dff62aba632fef361ded6d71dccf7",
+   "sha256_source": "a34fce60de124020e1439de640405692c5463cb67193f86110fb4790730b84ad",
+   "source": "engine/formats/detect.py"
+  },
+  "formats/isoxml.py": {
+   "changes": [],
+   "sha256": "6e4cd2f1a7ee115f8347c9583b28f4022fa18edf51066c29da64f29d23fc061a",
+   "sha256_source": "6e4cd2f1a7ee115f8347c9583b28f4022fa18edf51066c29da64f29d23fc061a",
+   "source": "engine/formats/isoxml.py"
+  },
+  "formats/jd_gs3_rcd.py": {
+   "changes": [
+    "package name: 1 import line(s) 'engine' -> 'oced_clean._engine'"
+   ],
+   "sha256": "e77ff4f26312b3e568796ed5cd7aa91bcf7171786ffb0d0c5e5ea83e5a0d803d",
+   "sha256_source": "ec4f38456b03d1a67d68eae20f674cd1032cd937e4e7bb7279fbde370eda3b2c",
+   "source": "engine/formats/jd_gs3_rcd.py"
+  },
+  "formats/jd_jdl.py": {
+   "changes": [],
+   "sha256": "fbf19b9afc1a78345bcd083a10dbe957ad903670b0224eabbb38a8f71f6f5fd0",
+   "sha256_source": "fbf19b9afc1a78345bcd083a10dbe957ad903670b0224eabbb38a8f71f6f5fd0",
+   "source": "engine/formats/jd_jdl.py"
+  },
+  "formats/kml_points.py": {
+   "changes": [
+    "package name: 1 import line(s) 'engine' -> 'oced_clean._engine'"
+   ],
+   "sha256": "678995ddd1294591c3914af9329f8ae96ef859036f9a2111b83b1cb48bf1791d",
+   "sha256_source": "55ea1a54135c9b4cc14f237d62d336976bcdee8daeb45e391586d972d09cbf14",
+   "source": "engine/formats/kml_points.py"
+  },
+  "formats/ops_sections.py": {
+   "changes": [
+    "package name: 3 import line(s) 'engine' -> 'oced_clean._engine'"
+   ],
+   "sha256": "a40a3f280098222b3a28998087c82523d59047b68a78ba91dd89eb28e44eed37",
+   "sha256_source": "28108b3abc1ab477e79bcfaf76b7ea94977477b94168d1a1ad6c76b65f021729",
+   "source": "engine/formats/ops_sections.py"
+  },
+  "report/__init__.py": {
+   "changes": [
+    "not from OCED: empty package marker of the report stubs"
+   ],
+   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "sha256_source": null,
+   "source": null
+  },
+  "report/applied_report.py": {
+   "changes": [
+    "not from OCED: do-nothing make_report() in place of the PDF report of a planter / sprayer cleaning (never run here)"
+   ],
+   "sha256": "e94fa37eb2ef5e737f0ca1e2141fd94ba25d58169fcfc2394e6e6393fb216715",
+   "sha256_source": null,
+   "source": null
+  },
+  "report/clean_report.py": {
+   "changes": [
+    "not from OCED: do-nothing make_report() in place of the PDF report"
+   ],
+   "sha256": "f3bdeb0a68b208ec0e8f3b3572cca3676f61ed2052fc0d4eac5bd812d215c626",
+   "sha256_source": null,
+   "source": null
+  },
+  "run.py": {
+   "changes": [
+    "package name: 10 import line(s) 'engine' -> 'oced_clean._engine'"
+   ],
+   "sha256": "2cdf72ad980a2ae6e541da1f43651d647643b98fab69017b29674fec92816da0",
+   "sha256_source": "02f09e7a5bdf274f13f4ac3274e68fb8b1653831e5afc8c21d7f72ff1991cd7c",
+   "source": "engine/run.py"
+  },
+  "sms_import.py": {
+   "changes": [
+    "package name: 5 import line(s) 'engine' -> 'oced_clean._engine'"
+   ],
+   "sha256": "3bf4c5d96f9c00f93a391821e113d6c2cf055f692f9bcb64985a8d647153dc92",
+   "sha256_source": "4bfd6605b81d28198083d246975b65a55c2896e5e8883c1c04a7c27dc45b5fc3",
+   "source": "engine/sms_import.py"
+  }
+ },
+ "not_copied": [
+  "engine/report/* (PDF report)",
+  "engine/works.py (the app's saved works)",
+  "engine/clean/references.py (literature citations of the report; optional in OCED)",
+  "engine/formats/*_write.py, native_write.py, isoxml_write.py (monitor-format writers)"
+ ],
+ "oced_version": "0.3.0",
+ "package": "oced_clean._engine",
+ "patches": [
+  {
+   "file": "engine/formats/detect.py",
+   "what": "module name built as a string for importlib: the engine's package name inside this package"
+  },
+  {
+   "file": "engine/clean/yield_clean.py",
+   "what": "scikit-image imported only when the overlap raster of OCED's other cleaning method runs (never here)"
+  },
+  {
+   "file": "*",
+   "what": "import lines of the top-level package 'engine' renamed to 'oced_clean._engine'"
+  },
+  {
+   "file": "report/clean_report.py, report/applied_report.py",
+   "what": "stubs: no PDF report (OCED's engine/report is not copied)"
+  }
+ ],
+ "source_repository": "https://github.com/GilbertoSiebertFilho/OCED.git",
+ "synced_at": "2026-11-12T07:29:18Z",
+ "what": "The cleaning engine of OCED (Olds College Extract Data), copied by tools/sync_engine.py. Do not edit the files in this folder: change OCED and sync again."
+}

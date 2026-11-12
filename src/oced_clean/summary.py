@@ -68,9 +68,9 @@ def _find(fields, *starts) -> str | None:
     return None
 
 
-def _columns(R: dict, fields: list) -> dict:
+def _columns(R: dict, fields: list, adjusted: str | None = None) -> dict:
     """Which column of the clean file holds what. Units are the ones the engine reads the file in (the SMS / Operations
-    Center export convention)."""
+    Center export convention). adjusted = the column of the adjusted yield, when the cleaning adjusted something."""
     C = R.get("columns") or {}
     ch = (R.get("sms3sigma") or {}).get("difm_ready_changes") or {}
     width = C.get("width_ft") or ("Wdth_Opt" if "Wdth_Opt" in (R.get("difm_ready_added_columns") or []) else None)
@@ -86,7 +86,7 @@ def _columns(R: dict, fields: list) -> dict:
         "yield_volume_dry": col(C.get("yield") or R.get("yield_column_for_difm"), "bu/ac",
                                 "the monitor's yield as cleaned: dry volume at the dry moisture of the import, as SMS "
                                 "exports it after Optimize Swath Widths"),
-        "yield_volume_dry_adjusted": col(adjusted_column(R), "bu/ac",
+        "yield_volume_dry_adjusted": col(adjusted, "bu/ac",
                                          "the same x the combine factor and / or the level factor of the grower's "
                                          "weight"),
         "yield_mass_dry": col(_find(fields, "yld_mass_d", "drymass", "dry_mass"), "lb/ac"),
@@ -177,21 +177,14 @@ def _combines(R: dict) -> list:
     return out
 
 
-def adjusted_column(R: dict) -> str | None:
-    """The column of the full clean file that holds the adjusted yield; None when the cleaning adjusted nothing. It
-    is the engine's own column to map when that is not the monitor's dry yield: Yld_Harm (the dry yield x the combine
-    factor) or Yld_Level (that, leveled to the grower's weight)."""
-    col = R.get("yield_column_for_difm")
-    return col if (col and col != (R.get("columns") or {}).get("yield")) else None
-
-
-def _adjustment(R: dict) -> dict:
+def _adjustment(R: dict, adj: dict | None) -> dict:
     """What was done after the cleaning, from the engine's record. combine_factor (None when it was not asked for):
     the method asked for and used, the reference combine, the factor applied to every combine (1 = none) and the
     engine's sentence on each. grower_weight (None when none was given): the weight as given and in lb and bu, the
     bushel it was converted with, the monitor's total it was compared with, the level factor (the weight / that
-    total; after the combine factor when one was applied). `column` is the adjusted yield of the full clean file,
-    None when nothing was applied."""
+    total; after the combine factor when one was applied). `column` is the adjusted yield of the full clean file and
+    `what` the engine's description of it as a product (adj = the engine's own account of the adjustment,
+    engine/difm.py adjustment_of); both None when nothing was applied."""
     S = R.get("settings") or {}
     Ms, M = S.get("machines") or {}, R.get("machines") or {}
     factor = None
@@ -213,18 +206,22 @@ def _adjustment(R: dict) -> dict:
                   "monitor_total_bu": L.get("export_total_bu"), "level_factor": L.get("factor"),
                   "level_factor_after_combine_factor": L.get("factor_harmonised"),
                   "column": R.get("level_column_for_difm")}
-    return {"combine_factor": factor, "grower_weight": weight, "column": adjusted_column(R)}
+    return {"combine_factor": factor, "grower_weight": weight, "column": (adj or {}).get("column"),
+            "what": (adj or {}).get("what")}
 
 
 def _difm_file(W: dict | None, which: str | None, asked: str | None, R: dict) -> dict | None:
     """The shapefile for DIFM as the engine's writer recorded it, and which yield it carries."""
     if not W:
         return None
-    col = adjusted_column(R)
-    d = {"zip": os.path.basename(str(W.get("zip") or "")), "yield": which, "yield_asked": asked,
-         "yield_column_of_the_clean_file": col if which == "adjusted" else (R.get("columns") or {}).get("yield"),
-         "layout": W.get("layout"), "readings": W.get("n"), "fields": [f[0] for f in W.get("fields") or []],
+    d = {"zip": os.path.basename(str(W.get("zip") or "")), "zip_bytes": W.get("zip_bytes"),
+         "yield": which, "yield_asked": asked, "label": W.get("label"), "line": W.get("line"),
+         "yield_column_of_the_clean_file": (W.get("columns") or {}).get("Yld_Vol_Dr"),
+         "readings_adjusted": W.get("n_adjusted") if which == "adjusted" else None,
+         "factor": W.get("factor"), "layout": W.get("layout"), "readings": W.get("n"),
+         "fields": [f[0] for f in W.get("fields") or []], "filled_from_the_import": W.get("derived") or {},
          "date_from": W.get("days"), "readings_without_date": W.get("n_no_day"),
+         "readings_without_yield": W.get("n_blank_yield"),
          "notes": list(W.get("notes") or []), "warnings": list(W.get("warnings") or [])}
     if asked == "adjusted" and which != "adjusted":
         d["notes"].insert(0, "the adjusted yield was asked for, but the cleaning applied no adjustment (summary "
@@ -299,9 +296,9 @@ def build(R: dict, files: dict, dataset: dict, units: list, unit_note: str, deco
                               ("n_narrowed_points", "n_scaled_points", "n_shortened_points", "width_column",
                                "scaled_columns")},
         },
-        "adjustment": _adjustment(R),
+        "adjustment": _adjustment(R, (difm or {}).get("adjustment")),
         "difm_file": _difm_file(difm, difm_yield, difm_yield_asked, R),
-        "columns": _columns(R, fields),
+        "columns": _columns(R, fields, ((difm or {}).get("adjustment") or {}).get("column")),
         "files": {"difm_zip": (difm or {}).get("zip"),
                   "clean_shp": files.get("difm_ready_shp"), "clean_zip": files.get("difm_ready_zip"),
                   "flagged_shp": files.get("flagged_shp"), "flagged_zip": files.get("flagged_zip"),

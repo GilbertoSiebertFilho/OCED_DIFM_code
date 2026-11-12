@@ -1,3 +1,7 @@
-# LF in the repository and in every checkout: tools/sync_engine.py records the hash of each copied engine file,
-# and tests/test_engine_manifest.py compares the files on disk with it, byte for byte.
+# LF in the repository and in every checkout.
 * text=auto eol=lf
+# The copied engine and OCED's generators are kept byte for byte as OCED's commit holds them (some of its files have
+# CRLF line endings): tools/sync_engine.py records the hash of each copied file, and tests/test_engine_manifest.py
+# compares the files on disk with it. No conversion of line endings there, in the repository or in a checkout.
+src/oced_clean/_engine/** -text
+tests/oced_synthetic/** -text
