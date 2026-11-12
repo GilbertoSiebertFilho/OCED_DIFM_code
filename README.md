@@ -39,7 +39,7 @@ comes from.
 | The shapefile for DIFM, in the SMS shapefile export layout, with the monitor's yield or the adjusted one | written by the engine, handed out as `result.difm_zip` |
 | The tests, on synthetic data (`tests/`) | 114, all pass on the developer's computer (Windows 11, Python 3.14) |
 | Install into a clean environment (`pip install .` with the versions of `constraints-tested.txt`) | done on the same computer: only the listed dependencies come in, `oced-clean version` answers, and 113 of the 114 tests pass against the installed package (the other one checks the copy inside a checkout of this repository, and passes there) |
-| The byte-for-byte comparison with OCED 0.3.0 on real raw data (`tools/check_equivalence.py`) | running on the developer's computer at the time of this commit; the result is added here when it has finished |
+| The byte-for-byte comparison with OCED 0.3.0 on real raw data (`tools/check_equivalence.py`) | done on the developer's computer, on uploads of every kind of source (a `.cn1` card, a GreenStar 3 card, Gen4 `.jdl` logs, ISOXML task data, Operations Center exports by section, point exports), one combine and several: the clean and the flagged shapefiles are identical to OCED's, byte for byte, in every case. The shapefile for DIFM is not part of that comparison, because OCED's command line does not write it; where a file OCED itself had written for the same upload was at hand, the package's held the same readings with the same values |
 | An upload of this package's shapefile for DIFM to the platform | not done yet |
 | Linux, and Python 3.10 to 3.13 | not run: see [Limits](#limits) |
 
