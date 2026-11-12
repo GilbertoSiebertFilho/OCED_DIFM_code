@@ -465,7 +465,7 @@ The keys of the summary:
 | `difm_file` | the shapefile for DIFM: `zip` (its name), `zip_bytes`, `yield` (`adjusted` or `monitor`), `yield_asked`, `label` and `line` (the engine's words for which yield it is), `yield_column_of_the_clean_file`, `readings_adjusted`, `factor` (min, max, mean of the per-reading factor), `layout`, `readings`, `fields`, `filled_from_the_import`, `date_from`, `readings_without_date`, `readings_without_yield`, and the writer's `notes` and `warnings` |
 | `columns` | which column of the full clean file holds what, with its unit: `yield_volume_dry` (the monitor's), `yield_volume_dry_adjusted` (only when something was adjusted), `yield_mass_dry`, `yield_volume_wet`, `yield_mass_wet`, `moisture`, `swath_width`, `distance`, `speed`, `heading`, `duration`, `time`, `elevation`, `harvester_id`, `dataset`. The shapefile for DIFM needs no such list: its columns are always the eighteen above |
 | `files` | the paths of the shapefile for DIFM (`difm_zip`), of the full clean and flagged files and of the engine's record |
-| `warnings`, `checks`, `notes` | what the engine wants a person to read. `warnings` matter: a combine whose points sit beside its strip, readings with no moisture value, a crop the table does not know |
+| `warnings`, `checks`, `notes` | what the engine wants a person to read. `warnings` matter: a combine whose points sit beside its strip, readings with no moisture value, a crop the table does not know; and, starting with `shapefile for DIFM:`, what the writer of that file warns of (readings without moisture, swath width, date or yield; the adjusted yield not being in a monitor file; a zip over 10 MB) |
 
 ## Calling it from the DIFM pipeline
 
@@ -509,6 +509,9 @@ Notes for the integration:
   | Elevation | `Elevation_`, ft |
   | Date | `Date` (and `Time`, the same date) |
 
+  Width and Moisture are always to be mapped: without the width the platform falls back to the harvester width
+  typed in the trial. The engine warns when a reading of the file has no moisture or no swath width, and the
+  warning is in `summary["warnings"]` (it starts with `shapefile for DIFM:`).
 - **Monitor or adjusted yield.** The mapping above is the same for both files: the adjusted yield is in the same
   columns. When the platform has the grower's weight of the field, pass it as `grower_weight`; with several
   combines, `combine_factor=True`. Keep `result.difm_yield` with the job, so a report can say which yield it used.
@@ -652,7 +655,7 @@ Read these before relying on the package.
   combine factor and the level of the grower's weight come after it and are not part of that comparison; the
   monitor's yield can always be asked for (`difm_yield="monitor"`).
 - **Options that are not established against SMS** are not exposed: moving a combine's points sideways before the
-  swath step, and running the swath step per combine. The engine reports a combine whose points sit a foot or more
+  swath step, running the swath step per combine, and running it more than once. The engine reports a combine whose points sit a foot or more
   beside the strip it cut as a warning in the summary; read it.
 - **Time zone.** John Deere logs carry UTC. `Harv_Day` and `Session` of the full clean file are made from the local
   day estimated from the longitude. They do not affect which readings are kept unless `group_by="task"`. The dates

@@ -100,6 +100,11 @@ def test_the_run_hands_out_the_file(run):
     assert run.summary["files"]["difm_zip"] == run.difm_zip == run.to_dict()["difm_zip"]
     assert run.summary["difm_file"]["yield"] == run.difm_yield == run.to_dict()["difm_yield"]
     assert run.difm_zip != run.clean_zip and "for DIFM" in run.text() and f"{run.difm_yield} yield" in run.text()
+    # what the writer warns of reaches the warnings a pipeline shows, and the text report
+    start = "shapefile for DIFM: "
+    mine = [w[len(start):] for w in run.summary["warnings"] if w.startswith(start)]
+    assert mine == run.summary["difm_file"]["warnings"]
+    assert all(w in run.text() for w in mine)
 
 
 def test_the_name_says_which_yield(run):
@@ -153,6 +158,8 @@ def test_the_monitor_file_is_the_one_of_a_run_without_adjustments(field_run, lev
     the cleaning that was given no weight."""
     assert leveled_monitor.difm_yield == "monitor" and leveled_monitor.summary["difm_file"]["yield_asked"] == "monitor"
     assert leveled_monitor.summary["adjustment"]["grower_weight"]["level_factor"] != 1.0     # the weight was used
+    # ... and the writer says that the adjusted yield of the cleaning is not in this file
+    assert any("Yld_Level" in w for w in leveled_monitor.summary["difm_file"]["warnings"])
     a = helpers.unpack_difm(field_run.difm_zip, str(tmp_path / "a"))
     b = helpers.unpack_difm(leveled_monitor.difm_zip, str(tmp_path / "b"))
     assert helpers.dbf_header(a[:-4] + ".dbf")["fields"] == helpers.dbf_header(b[:-4] + ".dbf")["fields"]

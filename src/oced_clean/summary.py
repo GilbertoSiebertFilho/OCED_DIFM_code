@@ -25,6 +25,7 @@ import os
 from . import __about__
 
 STEP_NAMES = {"S0": "Import check", "S1": "Clip to field boundary", "S2": "Optimize Swath Widths"}
+DIFM_WARNING = "shapefile for DIFM: "       # how a warning of the DIFM writer starts in the summary's warnings
 ATTRIBUTE_STEP = {"moisture": "Moisture", "speed": "Speed", "dry yield": "Dry yield"}
 
 
@@ -303,7 +304,9 @@ def build(R: dict, files: dict, dataset: dict, units: list, unit_note: str, deco
                   "clean_shp": files.get("difm_ready_shp"), "clean_zip": files.get("difm_ready_zip"),
                   "flagged_shp": files.get("flagged_shp"), "flagged_zip": files.get("flagged_zip"),
                   "engine_json": files.get("json"), "output_dir": files.get("dir")},
-        "warnings": list(R.get("warnings") or []),
+        # the engine's warnings of the cleaning, then those of its writer of the shapefile for DIFM (a reading
+        # without moisture or swath width, which DIFM is to have mapped; without a date or a yield; a zip too large)
+        "warnings": list(R.get("warnings") or []) + [DIFM_WARNING + w for w in (difm or {}).get("warnings") or []],
         "checks": list(R.get("advice") or []),
         "notes": list(R.get("notes") or []) + [f"input: {n}" for n in (notes or [])],
     }
